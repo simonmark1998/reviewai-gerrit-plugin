@@ -17,7 +17,6 @@
 package com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context;
 
 import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.AiConnectionFailException;
-import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.OperationNotSupportedException;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.endpoint.OpenAiRun;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.model.api.openai.OpenAiAssistantTools;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.model.api.openai.OpenAiRunResponse;
@@ -29,11 +28,7 @@ public interface ICodeContextPolicy {
 
   boolean runActionRequired(OpenAiRunResponse runResponse) throws AiConnectionFailException;
 
-  String generateVectorStore() throws AiConnectionFailException;
-
-  void removeVectorStore() throws OperationNotSupportedException;
-
-  void updateAssistantTools(OpenAiAssistantTools openAIAssistantTools, String vectorStoreId);
+  void updateAssistantTools(OpenAiAssistantTools openAIAssistantTools);
 
   void addCodeContextPolicyAwareAssistantInstructions(List<String> instructions);
 

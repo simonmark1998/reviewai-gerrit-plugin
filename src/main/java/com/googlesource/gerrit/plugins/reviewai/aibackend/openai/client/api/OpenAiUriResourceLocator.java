@@ -19,10 +19,6 @@ package com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api;
 public class OpenAiUriResourceLocator {
   private static final String VERSION_URI = "/v1";
 
-  public static String filesCreateUri() {
-    return VERSION_URI + "/files";
-  }
-
   public static String assistantCreateUri() {
     return VERSION_URI + "/assistants";
   }
@@ -63,16 +59,4 @@ public class OpenAiUriResourceLocator {
     return runRetrieveUri(threadId, runId) + "/submit_tool_outputs";
   }
 
-  public static String vectorStoreCreateUri() {
-    return VERSION_URI + "/vector_stores";
-  }
-
-  public static String vectorStoreFileBatchCreateUri(String vectorStoreId) {
-    return vectorStoreCreateUri() + "/" + vectorStoreId + "/file_batches";
-  }
-
-  public static String vectorStoreFileBatchRetrieveUri(
-      String vectorStoreId, String vectorStoreFileBatchId) {
-    return vectorStoreFileBatchCreateUri(vectorStoreId) + "/" + vectorStoreFileBatchId;
-  }
 }

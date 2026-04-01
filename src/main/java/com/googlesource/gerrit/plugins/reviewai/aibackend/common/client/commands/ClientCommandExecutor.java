@@ -22,14 +22,12 @@ import com.googlesource.gerrit.plugins.reviewai.config.dynamic.DynamicConfigMana
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandler;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
 import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.DynamicDirectivesModifyException;
-import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.OperationNotSupportedException;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context.ICodeContextPolicy;
 import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.messages.debug.DebugCodeBlocksDirectives;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.OpenAiAssistantHandler;
-import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.OpenAiVectorStoreHandler;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
 import lombok.extern.slf4j.Slf4j;
 
@@ -89,7 +87,6 @@ public class ClientCommandExecutor extends ClientCommandBase {
     this.nextString = nextString.trim();
     switch (command) {
       case REVIEW, REVIEW_LAST -> commandForceReview(command);
-      case UPLOAD_CODEBASE -> commandUploadCodebase();
       case FORGET_THREAD -> commandForgetThread();
       case CONFIGURE -> commandDynamicallyConfigure();
       case DIRECTIVES -> commandDirectives();
@@ -122,32 +119,6 @@ public class ClientCommandExecutor extends ClientCommandBase {
       changeSetData.setDebugReviewMode(true);
       changeSetData.setReplyFilterEnabled(false);
     }
-  }
-
-  private void commandUploadCodebase() {
-    log.info("Uploading codebase for the project");
-    OpenAiAssistantHandler openAiAssistantHandler =
-        new OpenAiAssistantHandler(
-            config, changeSetData, change, codeContextPolicy, pluginDataHandlerProvider);
-    try {
-      openAiAssistantHandler.flushAssistantAndVectorIds();
-    } catch (OperationNotSupportedException e) {
-      changeSetData.setReviewSystemMessage(
-          localizer.getText("message.command.codebase.upload.context.policy.mismatch"));
-      return;
-    }
-    OpenAiVectorStoreHandler openAiVectorStoreHandler =
-        new OpenAiVectorStoreHandler(
-            config, change, gitRepoFiles, pluginDataHandlerProvider.getProjectScope());
-    try {
-      openAiVectorStoreHandler.generateVectorStore();
-    } catch (Exception OpenAiConnectionFailException) {
-      changeSetData.setReviewSystemMessage(
-          localizer.getText("message.command.codebase.upload.error"));
-      return;
-    }
-    changeSetData.setReviewSystemMessage(
-        localizer.getText("message.command.codebase.upload.successful"));
   }
 
   private void commandForgetThread() {

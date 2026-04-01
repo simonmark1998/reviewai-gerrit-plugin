@@ -65,8 +65,7 @@ public class ClientCommandParser extends ClientCommandBase {
           List.of(
               CommandSet.DIRECTIVES,
               CommandSet.CONFIGURE,
-              CommandSet.SHOW,
-              CommandSet.UPLOAD_CODEBASE));
+              CommandSet.SHOW));
 
   private final ChangeSetData changeSetData;
   private final Localizer localizer;

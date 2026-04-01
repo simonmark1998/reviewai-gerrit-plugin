@@ -63,7 +63,6 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.con
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.gerrit.GerritClientPatchSetOpenAi;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.CodeContextPolicyNone;
-import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.code.context.CodeContextPolicyUploadAll;
 
 import lombok.NonNull;
 import org.junit.Before;
@@ -362,9 +361,6 @@ public class ReviewTestBase extends TestBase {
     return switch (config.getCodeContextPolicy()) {
       case NONE -> new CodeContextPolicyNone(config);
       case ON_DEMAND -> new CodeContextPolicyOnDemand(config);
-      case UPLOAD_ALL ->
-          new CodeContextPolicyUploadAll(
-              config, getGerritChange(), gitRepoFiles, pluginDataHandlerProvider);
     };
   }
 

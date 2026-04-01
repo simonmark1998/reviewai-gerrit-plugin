@@ -232,8 +232,6 @@ directive = End each reply with \"Hope this helps!\"
     - **ON_DEMAND**: Fetches just the minimal set of code artifacts requested by the Model. These artifacts can be
       function signatures, type declarations, or similar entities that provide sufficient context for reasoning about
       the change.
-    - **UPLOAD_ALL**: Uploads the entire codebase during each merge event, giving AI full access to the necessary
-      context for its reviews.
     - **NONE**: Skips file uploads entirely, relying solely on the formatted patch for reviews and interactions with AI.
 
 ### Optional Parameters Specific to OpenAI Backend
@@ -475,7 +473,6 @@ DUMP OF LOCAL DATA
 originalLogLevel: INFO
 
 ### Project Scope
-vectorStoreId: vs_XXXXXXXXXXXXXXXXXXXX
 fileId: vs_XXXXXXXXXXXXXXXXXXXX
 
 ### Change Scope
@@ -545,19 +542,6 @@ selectiveLogLevelOverride:
 taskSpecificAssistants: false
 votingMaxScore: 1
 votingMinScore: -1
-```
-
-### Uploading Codebase
-
-This command allows you to force the upload of the Git project's codebase to AI.
-
-**NOTE**: Running this command, available when the `enableMessageDebugging` configuration setting is enabled, may
-increase AI API usage and should be used for **testing or debugging purposes only**.
-
-#### Basic Syntax
-
-```
-/upload_codebase
 ```
 
 ## Testing

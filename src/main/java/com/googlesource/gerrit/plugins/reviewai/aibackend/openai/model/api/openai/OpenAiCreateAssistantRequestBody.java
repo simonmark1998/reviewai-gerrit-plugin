@@ -16,7 +16,6 @@
 
 package com.googlesource.gerrit.plugins.reviewai.aibackend.openai.model.api.openai;
 
-import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
 
@@ -31,7 +30,4 @@ public class OpenAiCreateAssistantRequestBody {
   private String model;
   private Double temperature;
   private List<OpenAiTool> tools;
-
-  @SerializedName("tool_resources")
-  private OpenAiToolResources toolResources;
 }

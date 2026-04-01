@@ -18,7 +18,6 @@ package com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.co
 
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.AiConnectionFailException;
-import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.OperationNotSupportedException;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context.ICodeContextPolicy;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.ClientBase;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.endpoint.OpenAiRun;
@@ -32,8 +31,7 @@ import java.util.List;
 public abstract class CodeContextPolicyBase extends ClientBase implements ICodeContextPolicy {
   public enum CodeContextPolicies {
     NONE,
-    ON_DEMAND,
-    UPLOAD_ALL
+    ON_DEMAND
   }
 
   public CodeContextPolicyBase(Configuration config) {
@@ -50,17 +48,7 @@ public abstract class CodeContextPolicyBase extends ClientBase implements ICodeC
     return false;
   }
 
-  public String generateVectorStore() throws AiConnectionFailException {
-    log.debug("Vector Store generating skipped with the current code context policy");
-    return null;
-  }
-
-  public void removeVectorStore() {
-    log.debug("Vector Store removal skipped with the current code context policy");
-  }
-
-  public void updateAssistantTools(
-      OpenAiAssistantTools openAiAssistantTools, String vectorStoreId) {
+  public void updateAssistantTools(OpenAiAssistantTools openAiAssistantTools) {
     log.debug("Assistant Tools updating skipped with the current code context policy");
   }
 

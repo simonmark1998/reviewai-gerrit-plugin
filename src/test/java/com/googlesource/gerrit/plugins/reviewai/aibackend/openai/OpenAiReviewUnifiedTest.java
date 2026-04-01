@@ -36,7 +36,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static com.googlesource.gerrit.plugins.reviewai.listener.EventHandlerTask.SupportedEvents;
-import static com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.OpenAiPoller.FAILED_STATUS;
 import static com.googlesource.gerrit.plugins.reviewai.settings.Settings.GERRIT_PATCH_SET_FILENAME;
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 import static java.net.HttpURLConnection.HTTP_OK;
@@ -56,29 +55,6 @@ public class OpenAiReviewUnifiedTest extends OpenAiReviewTestBase {
     setupMockRequestCreateAssistant(OPENAI_ASSISTANT_ID);
     setupMockRequestCreateRun(OPENAI_ASSISTANT_ID, OPENAI_RUN_ID);
     setupMockRequestRetrieveRunSteps("openAiRunStepsResponse.json");
-
-    if ("vectorStoreCreateFailure".equals(testName.getMethodName())) {
-      when(globalConfig.getInt(Mockito.eq("aiPollingTimeout"), Mockito.anyInt())).thenReturn(0);
-    }
-  }
-
-  private void setupVectorStoreFailure() {
-    // Mock the behavior of the OpenAI create-vector-store-file-batch request with failure
-    WireMock.stubFor(
-        WireMock.post(
-                WireMock.urlEqualTo(
-                    OpenAiUriResourceLocator.vectorStoreFileBatchCreateUri(OPENAI_VECTOR_STORE_ID)))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody(
-                        "{\"id\": "
-                            + OPENAI_VECTOR_STORE_FILE_BATCH_ID
-                            + ", \"status\": "
-                            + FAILED_STATUS
-                            + "}")));
-    when(globalConfig.getInt(Mockito.eq("aiPollingInterval"), Mockito.anyInt())).thenReturn(0);
   }
 
   @Test
@@ -97,62 +73,6 @@ public class OpenAiReviewUnifiedTest extends OpenAiReviewTestBase {
     Assert.assertEquals(reviewMessageCode, getCapturedMessage(captor, "test_file_1.py"));
     Assert.assertEquals(
         reviewMessageCommitMessage, getCapturedMessage(captor, GERRIT_PATCH_SET_FILENAME));
-  }
-
-  @Test
-  public void filesCreateResponse400() {
-    WireMock.stubFor(
-        WireMock.post(WireMock.urlEqualTo(OpenAiUriResourceLocator.filesCreateUri()))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_BAD_REQUEST)
-                    .withHeader(
-                        HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())));
-    // This test executes 2 retries with the retry interval configured to 0.
-    when(globalConfig.getInt(Mockito.eq("aiConnectionMaxRetryAttempts"), Mockito.anyInt()))
-        .thenReturn(2);
-    when(globalConfig.getInt(Mockito.eq("aiConnectionRetryInterval"), Mockito.anyInt()))
-        .thenReturn(0);
-
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
-
-    Assert.assertEquals(
-        localizer.getText("message.openai.connection.error"),
-        changeSetData.getReviewSystemMessage());
-  }
-
-  @Test
-  public void vectorStoreCreateFirstTimeFailure() throws Exception {
-    String reviewMessageCode =
-        getReviewMessage(RESOURCE_OPENAI_PATH + "openAiRunStepsResponse.json", 0);
-    setupVectorStoreFailure();
-
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
-
-    ArgumentCaptor<ReviewInput> captor = testRequestSent();
-    Assert.assertEquals(reviewMessageCode, getCapturedMessage(captor, "test_file_1.py"));
-  }
-
-  @Test
-  public void vectorStoreCreateFailure() {
-    setupVectorStoreFailure();
-    // Mock the behavior of the OpenAI retrieve-vector-store-file-batch request with failure
-    WireMock.stubFor(
-        WireMock.post(
-                WireMock.urlEqualTo(
-                    OpenAiUriResourceLocator.vectorStoreFileBatchRetrieveUri(
-                        OPENAI_VECTOR_STORE_ID, OPENAI_VECTOR_STORE_FILE_BATCH_ID)))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody("{\"status\": " + FAILED_STATUS + "}")));
-
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
-
-    Assert.assertEquals(
-        localizer.getText("message.openai.connection.error"),
-        changeSetData.getReviewSystemMessage());
   }
 
   @Test

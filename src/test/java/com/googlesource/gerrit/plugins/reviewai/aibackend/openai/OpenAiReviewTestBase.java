@@ -36,6 +36,7 @@ import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.openai.clie
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.entity.ContentType;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.ByteArrayInputStream;
@@ -53,10 +54,6 @@ import static org.mockito.Mockito.when;
 
 @Slf4j
 public class OpenAiReviewTestBase extends ReviewTestBase {
-  protected static final String OPENAI_FILE_ID = "file-TEST_FILE_ID";
-  protected static final String OPENAI_VECTOR_STORE_ID = "vs-TEST_VECTOR_STORE_ID";
-  protected static final String OPENAI_VECTOR_STORE_FILE_BATCH_ID =
-      "vsfb-TEST_VECTOR_STORE_FILE_BATCH_ID";
   protected static final String OPENAI_THREAD_ID = "thread_TEST_THREAD_ID";
   protected static final String OPENAI_MESSAGE_ID = "msg_TEST_MESSAGE_ID";
   protected static final String OPENAI_RUN_ID = "run_TEST_RUN_ID";
@@ -79,7 +76,7 @@ public class OpenAiReviewTestBase extends ReviewTestBase {
         new PluginDataHandlerProvider(mockPluginDataPath, getGerritChange());
     projectHandler = provider.getProjectScope();
     // Mock the pluginDataHandlerProvider to return the mocked project pluginDataHandler
-    when(pluginDataHandlerProvider.getProjectScope()).thenReturn(projectHandler);
+    Mockito.lenient().when(pluginDataHandlerProvider.getProjectScope()).thenReturn(projectHandler);
     // Mock the pluginDataHandlerProvider to return the mocked assistant pluginDataHandler
     when(pluginDataHandlerProvider.getAssistantsWorkspace()).thenReturn(projectHandler);
   }
@@ -98,53 +95,7 @@ public class OpenAiReviewTestBase extends ReviewTestBase {
 
     // Mock the behavior of the Git Repository Manager
     String repoJson = readTestFile(RESOURCE_OPENAI_PATH + "gitProjectFiles.json");
-    when(gitRepoFiles.getGitRepoFilesAsJson(any(), any())).thenReturn(List.of(repoJson));
-
-    // Mock the behavior of the OpenAI create-file request
-    WireMock.stubFor(
-        WireMock.post(WireMock.urlEqualTo(OpenAiUriResourceLocator.filesCreateUri()))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody("{\"id\": " + OPENAI_FILE_ID + "}")));
-
-    // Mock the behavior of the OpenAI create-vector-store request
-    WireMock.stubFor(
-        WireMock.post(WireMock.urlEqualTo(OpenAiUriResourceLocator.vectorStoreCreateUri()))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody("{\"id\": " + OPENAI_VECTOR_STORE_ID + "}")));
-
-    // Mock the behavior of the OpenAI create-vector-store-file-batch request
-    WireMock.stubFor(
-        WireMock.post(
-                WireMock.urlEqualTo(
-                    OpenAiUriResourceLocator.vectorStoreFileBatchCreateUri(OPENAI_VECTOR_STORE_ID)))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody(
-                        "{\"id\": "
-                            + OPENAI_VECTOR_STORE_FILE_BATCH_ID
-                            + ", \"status\": "
-                            + COMPLETED_STATUS
-                            + "}")));
-
-    // Mock the behavior of the OpenAI retrieve-vector-store-file-batch request
-    WireMock.stubFor(
-        WireMock.get(
-                WireMock.urlEqualTo(
-                    OpenAiUriResourceLocator.vectorStoreFileBatchRetrieveUri(
-                        OPENAI_VECTOR_STORE_ID, OPENAI_VECTOR_STORE_FILE_BATCH_ID)))
-            .willReturn(
-                WireMock.aResponse()
-                    .withStatus(HTTP_OK)
-                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
-                    .withBody("{\"status\": " + COMPLETED_STATUS + "}")));
+    Mockito.lenient().when(gitRepoFiles.getGitRepoFilesAsJson(any(), any())).thenReturn(List.of(repoJson));
 
     // Mock the behavior of the OpenAI create-thread request
     WireMock.stubFor(

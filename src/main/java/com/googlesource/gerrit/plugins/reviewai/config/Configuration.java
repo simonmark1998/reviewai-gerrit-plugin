@@ -50,7 +50,7 @@ public class Configuration extends ConfigCore {
   private static final boolean DEFAULT_REVIEW_PATCH_SET = true;
   private static final boolean DEFAULT_REVIEW_COMMIT_MESSAGES = true;
   private static final boolean DEFAULT_FULL_FILE_REVIEW = true;
-  private static final String DEFAULT_CODE_CONTEXT_POLICY = "UPLOAD_ALL";
+  private static final String DEFAULT_CODE_CONTEXT_POLICY = "ON_DEMAND";
   private static final String DEFAULT_CODE_CONTEXT_ON_DEMAND_BASE_PATH = "";
   private static final boolean DEFAULT_GLOBAL_ENABLE = false;
   private static final String DEFAULT_DISABLED_USERS = "";

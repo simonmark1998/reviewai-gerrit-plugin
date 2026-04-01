@@ -64,9 +64,8 @@ public class OpenAiAssistant extends OpenAiApiBase {
     temperature = openAiParameters.getAiTemperature();
   }
 
-  public String createAssistant(String vectorStoreId) throws AiConnectionFailException {
-    log.debug("Creating assistant with vector store ID: {}", vectorStoreId);
-    Request request = createRequest(vectorStoreId);
+  public String createAssistant() throws AiConnectionFailException {
+    Request request = createRequest();
     log.debug("OpenAI Create Assistant request: {}", request);
 
     OpenAiResponse assistantResponse = getOpenAiResponse(request);
@@ -75,11 +74,11 @@ public class OpenAiAssistant extends OpenAiApiBase {
     return assistantResponse.getId();
   }
 
-  private Request createRequest(String vectorStoreId) {
+  private Request createRequest() {
     log.debug("Creating request to build new assistant.");
     String uri = OpenAiUriResourceLocator.assistantCreateUri();
     log.debug("OpenAI Create Assistant request URI: {}", uri);
-    updateTools(vectorStoreId);
+    updateTools();
 
     OpenAiCreateAssistantRequestBody requestBody =
         OpenAiCreateAssistantRequestBody.builder()
@@ -89,19 +88,18 @@ public class OpenAiAssistant extends OpenAiApiBase {
             .model(model)
             .temperature(temperature)
             .tools(openAiAssistantTools.getTools())
-            .toolResources(openAiAssistantTools.getToolResources())
             .build();
     log.debug("Request body for creating assistant: {}", requestBody);
 
     return httpClient.createRequestFromJson(uri, requestBody);
   }
 
-  private void updateTools(String vectorStoreId) {
+  private void updateTools() {
     OpenAiTools openAiFormatRepliesTools = new OpenAiTools(OpenAiTools.Functions.formatReplies);
     openAiAssistantTools =
         OpenAiAssistantTools.builder()
             .tools(new ArrayList<>(List.of(openAiFormatRepliesTools.retrieveFunctionTool())))
             .build();
-    codeContextPolicy.updateAssistantTools(openAiAssistantTools, vectorStoreId);
+    codeContextPolicy.updateAssistantTools(openAiAssistantTools);
   }
 }

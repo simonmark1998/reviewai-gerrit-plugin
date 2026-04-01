@@ -32,8 +32,7 @@ public abstract class ClientCommandBase extends ClientBase {
     DIRECTIVES,
     FORGET_THREAD,
     CONFIGURE,
-    SHOW,
-    UPLOAD_CODEBASE
+    SHOW
   }
 
   public enum BaseOptionSet {
@@ -59,8 +58,7 @@ public abstract class ClientCommandBase extends ClientBase {
           "directives", CommandSet.DIRECTIVES,
           "forget_thread", CommandSet.FORGET_THREAD,
           "configure", CommandSet.CONFIGURE,
-          "show", CommandSet.SHOW,
-          "upload_codebase", CommandSet.UPLOAD_CODEBASE);
+          "show", CommandSet.SHOW);
   private static final ImmutableBiMap<CommandSet, String> COMMAND_MAP_INVERSE =
       COMMAND_MAP.inverse();
 

@@ -61,8 +61,7 @@ public class OpenAiCodeContextPolicyOnDemand extends CodeContextPolicyOnDemand i
   }
 
   @Override
-  public void updateAssistantTools(
-      OpenAiAssistantTools openAiAssistantTools, String vectorStoreId) {
+  public void updateAssistantTools(OpenAiAssistantTools openAiAssistantTools) {
     OpenAiTools openAiGetContextTools = new OpenAiTools(OpenAiTools.Functions.getContext);
     openAiAssistantTools.getTools().add(openAiGetContextTools.retrieveFunctionTool());
     log.debug(

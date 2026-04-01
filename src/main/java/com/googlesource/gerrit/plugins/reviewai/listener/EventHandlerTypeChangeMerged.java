@@ -18,7 +18,6 @@ package com.googlesource.gerrit.plugins.reviewai.listener;
 
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
-import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.OperationNotSupportedException;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.listener.IEventHandlerType;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context.ICodeContextPolicy;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
@@ -61,13 +60,7 @@ public class EventHandlerTypeChangeMerged implements IEventHandlerType {
     OpenAiAssistantHandler openAiAssistantHandler =
         new OpenAiAssistantHandler(
             config, changeSetData, change, codeContextPolicy, pluginDataHandlerProvider);
-    try {
-      openAiAssistantHandler.flushAssistantAndVectorIds();
-    } catch (OperationNotSupportedException e) {
-      log.error("Exception while flushing assistant and vector ids", e);
-      return;
-    }
-    log.debug(
-        "Flushed assistant and Vector Store IDs for change merged: {}", change.getFullChangeId());
+    openAiAssistantHandler.flushAssistantIds();
+    log.debug("Flushed assistant IDs for change merged: {}", change.getFullChangeId());
   }
 }

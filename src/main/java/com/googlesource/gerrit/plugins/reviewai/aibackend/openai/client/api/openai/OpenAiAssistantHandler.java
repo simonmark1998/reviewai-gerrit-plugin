@@ -21,7 +21,6 @@ import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandler;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
 import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.AiConnectionFailException;
-import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.OperationNotSupportedException;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context.ICodeContextPolicy;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.ClientBase;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
@@ -66,8 +65,7 @@ public class OpenAiAssistantHandler extends ClientBase {
     String assistantId = assistantsDataHandler.getValue(assistantIdHashKey);
     if (assistantId == null || config.getForceCreateAssistant()) {
       log.debug("Setup Assistant for project {}", change.getProjectNameKey());
-      String vectorStoreId = codeContextPolicy.generateVectorStore();
-      assistantId = openAiAssistant.createAssistant(vectorStoreId);
+      assistantId = openAiAssistant.createAssistant();
       assistantsDataHandler.setValue(assistantIdHashKey, assistantId);
       log.info("Project Assistant created with ID: {}", assistantId);
     } else {
@@ -78,9 +76,8 @@ public class OpenAiAssistantHandler extends ClientBase {
     return assistantId;
   }
 
-  public void flushAssistantAndVectorIds() throws OperationNotSupportedException {
-    log.debug("Flushing Assistant and Vector Store IDs.");
-    codeContextPolicy.removeVectorStore();
+  public void flushAssistantIds() {
+    log.debug("Flushing Assistant IDs.");
     assistantsDataHandler.destroy();
   }
 

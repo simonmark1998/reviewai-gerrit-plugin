@@ -20,7 +20,7 @@ aiReviewTemperature: 0.2
 aiSystemPromptInstructions: Act as a PatchSet Reviewer
 aiUploadedChunkSizeMb: 5
 codeContextOnDemandBasePath: 
-codeContextPolicy: UPLOAD_ALL
+codeContextPolicy: ON_DEMAND
 directive: 
 disabledGroups: 
 disabledTopicFilter: 

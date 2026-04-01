@@ -32,7 +32,6 @@ import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.clie
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.CodeContextPolicyNone;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.CodeContextPolicyOnDemand;
-import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.code.context.CodeContextPolicyUploadAll;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.openai.OpenAiClient;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.openai.client.api.gerrit.GerritClientPatchSetOpenAi;
@@ -99,7 +98,6 @@ public class GerritEventContextModule extends FactoryModule {
           config.getAiBackend() == Settings.AiBackends.OPENAI
               ? OpenAiCodeContextPolicyOnDemand.class
               : CodeContextPolicyOnDemand.class;
-      case UPLOAD_ALL -> CodeContextPolicyUploadAll.class;
     };
   }
 }

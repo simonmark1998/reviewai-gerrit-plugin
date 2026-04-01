@@ -24,6 +24,5 @@ import java.util.List;
 @Data
 @Builder
 public class OpenAiAssistantTools {
-  private OpenAiToolResources toolResources;
   private List<OpenAiTool> tools;
 }
