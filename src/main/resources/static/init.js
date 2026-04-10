@@ -157,6 +157,22 @@ Gerrit.install(plugin => {
       }
     }
 
+    _resizeComposerInput(input) {
+      if (!input) {
+        return;
+      }
+      input.style.height = 'auto';
+      input.style.height = `${input.scrollHeight}px`;
+    }
+
+    _handleComposerKeydown(event) {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return;
+      }
+      event.preventDefault();
+      event.target.form.requestSubmit();
+    }
+
     _render() {
       this.replaceChildren();
 
@@ -223,8 +239,10 @@ Gerrit.install(plugin => {
           font-weight: 600;
         }
         .reviewai-history__composer-input {
-          min-height: 88px;
-          resize: vertical;
+          min-height: 1.5em;
+          line-height: 1.5;
+          resize: none;
+          overflow-y: hidden;
           padding: 10px 12px;
           border: 1px solid var(--border-color, #ccc);
           border-radius: 8px;
@@ -347,12 +365,15 @@ Gerrit.install(plugin => {
 
       const input = document.createElement('textarea');
       input.className = 'reviewai-history__composer-input';
+      input.rows = 1;
       input.placeholder = 'Ask the AI about this change...';
       input.disabled = this._submitting;
       input.value = this._draftMessage;
       input.addEventListener('input', event => {
         this._draftMessage = event.target.value;
+        this._resizeComposerInput(event.target);
       });
+      input.addEventListener('keydown', event => this._handleComposerKeydown(event));
 
       const actions = document.createElement('div');
       actions.className = 'reviewai-history__composer-actions';
@@ -375,6 +396,7 @@ Gerrit.install(plugin => {
       composer.appendChild(actions);
       container.appendChild(composer);
       this.appendChild(container);
+      this._resizeComposerInput(input);
     }
 
     _formatLocation(entry) {
