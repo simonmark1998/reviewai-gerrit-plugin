@@ -200,6 +200,11 @@ public class Configuration extends ConfigCore {
     return getString(KEY_AI_SYSTEM_PROMPT_INSTRUCTIONS, defaultAiSystemPromptInstructions);
   }
 
+  public Optional<String> getConfiguredAiSystemPromptInstructions() {
+    String value = getString(KEY_AI_SYSTEM_PROMPT_INSTRUCTIONS);
+    return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+  }
+
   // If the default system prompt/instructions are not available in the caller's scope (e.g., when
   // displaying the configuration after a command request), they are retrieved from the prompt
   // files.
