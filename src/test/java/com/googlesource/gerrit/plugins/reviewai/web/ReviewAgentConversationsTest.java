@@ -18,6 +18,7 @@ package com.googlesource.gerrit.plugins.reviewai.web;
 
 import com.google.gerrit.entities.Account;
 import com.google.gerrit.entities.Change;
+import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.Response;
 import com.google.gerrit.server.change.ChangeResource;
 import com.google.gson.JsonArray;
@@ -43,6 +44,7 @@ import static com.googlesource.gerrit.plugins.reviewai.utils.GsonUtils.getGson;
 @RunWith(MockitoJUnitRunner.class)
 public class ReviewAgentConversationsTest extends TestBase {
   @Mock private ChangeResource changeResource;
+  @Mock private AiReviewPermission aiReviewPermission;
 
   private ReviewAgentConversations view;
 
@@ -52,7 +54,9 @@ public class ReviewAgentConversationsTest extends TestBase {
     when(mockPluginDataPath.resolve(CHANGE_ID + ".data")).thenReturn(realChangeDataPath);
     Change change = new Change(CHANGE_ID, Change.id(1), Account.id(100), BRANCH_NAME, Instant.now());
     when(changeResource.getChange()).thenReturn(change);
-    view = new ReviewAgentConversations(new PluginDataHandlerBaseProvider(mockPluginDataPath));
+    view =
+        new ReviewAgentConversations(
+            new PluginDataHandlerBaseProvider(mockPluginDataPath), aiReviewPermission);
   }
 
   @Test
@@ -242,6 +246,17 @@ public class ReviewAgentConversationsTest extends TestBase {
     getInput.action = "get";
 
     assertEquals(null, view.apply(changeResource, getInput).value().conversation);
+  }
+
+  @Test(expected = AuthException.class)
+  public void rejectsConversationAccessWhenAiReviewIsNotAllowed() throws Exception {
+    ReviewAgentConversations.Input listInput = new ReviewAgentConversations.Input();
+    listInput.action = "list";
+    org.mockito.Mockito.doThrow(new AuthException("AI review is not allowed for this change"))
+        .when(aiReviewPermission)
+        .checkCanAiReview(changeResource);
+
+    view.apply(changeResource, listInput);
   }
 
   private ReviewAgentConversationInfo get(String conversationId) throws Exception {

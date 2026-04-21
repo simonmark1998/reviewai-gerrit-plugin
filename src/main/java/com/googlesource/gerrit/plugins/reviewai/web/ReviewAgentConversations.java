@@ -47,14 +47,19 @@ public class ReviewAgentConversations
       new TypeToken<Map<String, ReviewAgentConversationInfo>>() {}.getType();
 
   private final PluginDataHandlerBaseProvider pluginDataHandlerBaseProvider;
+  private final AiReviewPermission aiReviewPermission;
 
   @Inject
-  ReviewAgentConversations(PluginDataHandlerBaseProvider pluginDataHandlerBaseProvider) {
+  ReviewAgentConversations(
+      PluginDataHandlerBaseProvider pluginDataHandlerBaseProvider,
+      AiReviewPermission aiReviewPermission) {
     this.pluginDataHandlerBaseProvider = pluginDataHandlerBaseProvider;
+    this.aiReviewPermission = aiReviewPermission;
   }
 
   @Override
   public Response<Output> apply(ChangeResource resource, Input input) throws Exception {
+    aiReviewPermission.checkCanAiReview(resource);
     if (input == null || input.action == null || input.action.isBlank()) {
       throw new BadRequestException("action is required");
     }

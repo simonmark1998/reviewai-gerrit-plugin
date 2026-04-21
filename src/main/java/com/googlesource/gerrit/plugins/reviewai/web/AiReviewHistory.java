@@ -55,15 +55,21 @@ public class AiReviewHistory implements RestReadView<ChangeResource> {
 
   private final ConfigCreator configCreator;
   private final GerritAiReviewHistoryCollector collector;
+  private final AiReviewPermission aiReviewPermission;
 
   @Inject
-  AiReviewHistory(ConfigCreator configCreator, GerritAiReviewHistoryCollector collector) {
+  AiReviewHistory(
+      ConfigCreator configCreator,
+      GerritAiReviewHistoryCollector collector,
+      AiReviewPermission aiReviewPermission) {
     this.configCreator = configCreator;
     this.collector = collector;
+    this.aiReviewPermission = aiReviewPermission;
   }
 
   @Override
   public Response<AiReviewHistoryInfo> apply(ChangeResource resource) throws Exception {
+    aiReviewPermission.checkCanAiReview(resource);
     Change change = resource.getChange();
     Configuration config = configCreator.createConfig(resource.getProject(), change.getKey());
     Localizer localizer = new Localizer(config);

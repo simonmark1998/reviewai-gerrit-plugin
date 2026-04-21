@@ -178,6 +178,10 @@
     }
 
     async listChatConversations(change) {
+      if (!(await this._canAiReviewChange(change))) {
+        return [];
+      }
+
       const storedConversations = await this._listStoredConversations(change);
       if (this._hasReviewAiCommentsConversation(change, storedConversations)) {
         return storedConversations;
@@ -203,7 +207,7 @@
     }
 
     async getChatConversation(change, conversationId) {
-      if (!conversationId) {
+      if (!conversationId || !(await this._canAiReviewChange(change))) {
         return [];
       }
       const storedConversation = await this._getStoredConversation(change, conversationId);
@@ -340,6 +344,11 @@
 
     _sendMessage(change, message) {
       return reviewAi.api.createSendMessage(this.plugin, this.pluginName)(change, message);
+    }
+
+    async _canAiReviewChange(change) {
+      const modelInfo = await this._fetchModelInfo(change);
+      return canAiReview(modelInfo);
     }
 
     _conversationStore(change, input) {
