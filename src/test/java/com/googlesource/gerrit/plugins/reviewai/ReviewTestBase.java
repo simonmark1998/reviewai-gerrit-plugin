@@ -442,12 +442,6 @@ public class ReviewTestBase extends TestBase {
             patchEvent.patchSet = this::createPatchSetAttribute;
             when(patchEvent.getType()).thenReturn("patchset-created");
           };
-      case CHANGE_MERGED ->
-          event -> {
-            ChangeMergedEvent mergedEvent = (ChangeMergedEvent) event;
-            mergedEvent.submitter = this::createTestAccountAttribute;
-            when(mergedEvent.getType()).thenReturn("change-merged");
-          };
     };
   }
 

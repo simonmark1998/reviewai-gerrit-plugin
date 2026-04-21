@@ -24,15 +24,12 @@ import com.google.gerrit.server.IdentifiedUser;
 import com.google.gerrit.server.account.AccountCache;
 import com.google.gerrit.server.data.AccountAttribute;
 import com.google.gerrit.server.data.ChangeAttribute;
-import com.google.gerrit.server.events.ChangeMergedEvent;
 import com.google.gerrit.server.events.CommentAddedEvent;
 import com.google.gerrit.server.events.PatchSetCreatedEvent;
 import com.google.inject.Inject;
 import com.googlesource.gerrit.plugins.reviewai.PatchSetReviewer;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
-import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.listener.IEventHandlerType;
-import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.code.context.ICodeContextPolicy;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
@@ -54,29 +51,24 @@ public class EventHandlerTask implements Runnable {
 
   public enum SupportedEvents {
     PATCH_SET_CREATED,
-    COMMENT_ADDED,
-    CHANGE_MERGED
+    COMMENT_ADDED
   }
 
   public static final Map<SupportedEvents, Class<?>> EVENT_CLASS_MAP =
       Map.of(
           SupportedEvents.PATCH_SET_CREATED, PatchSetCreatedEvent.class,
-          SupportedEvents.COMMENT_ADDED, CommentAddedEvent.class,
-          SupportedEvents.CHANGE_MERGED, ChangeMergedEvent.class);
+          SupportedEvents.COMMENT_ADDED, CommentAddedEvent.class);
 
   private static final Map<String, SupportedEvents> EVENT_TYPE_MAP =
       Map.of(
           "patchset-created", SupportedEvents.PATCH_SET_CREATED,
-          "comment-added", SupportedEvents.COMMENT_ADDED,
-          "change-merged", SupportedEvents.CHANGE_MERGED);
+          "comment-added", SupportedEvents.COMMENT_ADDED);
 
   private final Configuration config;
   private final GerritClient gerritClient;
   private final ChangeSetData changeSetData;
   private final GerritChange change;
   private final PatchSetReviewer reviewer;
-  private final ICodeContextPolicy codeContextPolicy;
-  private final PluginDataHandlerProvider pluginDataHandlerProvider;
   private final AiReviewPermission aiReviewPermission;
   private final IdentifiedUser.GenericFactory identifiedUserFactory;
   private final AccountCache accountCache;
@@ -91,8 +83,6 @@ public class EventHandlerTask implements Runnable {
       GerritChange change,
       PatchSetReviewer reviewer,
       GerritClient gerritClient,
-      ICodeContextPolicy codeContextPolicy,
-      PluginDataHandlerProvider pluginDataHandlerProvider,
       AiReviewPermission aiReviewPermission,
       IdentifiedUser.GenericFactory identifiedUserFactory,
       AccountCache accountCache) {
@@ -101,8 +91,6 @@ public class EventHandlerTask implements Runnable {
     this.reviewer = reviewer;
     this.gerritClient = gerritClient;
     this.config = config;
-    this.codeContextPolicy = codeContextPolicy;
-    this.pluginDataHandlerProvider = pluginDataHandlerProvider;
     this.aiReviewPermission = aiReviewPermission;
     this.identifiedUserFactory = identifiedUserFactory;
     this.accountCache = accountCache;
@@ -178,9 +166,6 @@ public class EventHandlerTask implements Runnable {
           new EventHandlerTypePatchSetReview(config, changeSetData, change, reviewer, gerritClient);
       case COMMENT_ADDED ->
           new EventHandlerTypeCommentAdded(changeSetData, change, reviewer, gerritClient);
-      case CHANGE_MERGED ->
-          new EventHandlerTypeChangeMerged(
-              config, changeSetData, change, codeContextPolicy, pluginDataHandlerProvider);
     };
   }
 
@@ -237,8 +222,6 @@ public class EventHandlerTask implements Runnable {
             Optional.ofNullable(((CommentAddedEvent) change.getPatchSetEvent()).author.get());
         case PATCH_SET_CREATED ->
             Optional.ofNullable(((PatchSetCreatedEvent) change.getPatchSetEvent()).uploader.get());
-        case CHANGE_MERGED ->
-            Optional.ofNullable(((ChangeMergedEvent) change.getPatchSetEvent()).submitter.get());
       };
     } catch (RuntimeException e) {
       log.debug("Failed to retrieve event account for change {}", change.getFullChangeId(), e);
