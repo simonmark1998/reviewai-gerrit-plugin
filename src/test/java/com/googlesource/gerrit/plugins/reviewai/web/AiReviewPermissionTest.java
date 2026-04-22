@@ -23,6 +23,7 @@ import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.GroupReference;
 import com.google.gerrit.entities.Permission;
 import com.google.gerrit.entities.PermissionRule;
+import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.CurrentUser;
 import com.google.gerrit.server.account.GroupMembership;
 import com.google.gerrit.server.change.ChangeResource;
@@ -44,17 +45,18 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class AiReviewPermissionTest extends TestBase {
+  private static final Project.NameKey ALL_PROJECTS = Project.NameKey.parse("All-Projects");
   private static final AccountGroup.UUID DUMMY_GROUP_UUID = AccountGroup.uuid("dummy-group");
   private static final GroupReference DUMMY_GROUP =
       GroupReference.create(DUMMY_GROUP_UUID, "Dummy");
 
   @Mock private ProjectCache projectCache;
   @Mock private ProjectState projectState;
-  @Mock private SectionMatcher sectionMatcher;
   @Mock private CurrentUser currentUser;
   @Mock private GroupMembership groupMembership;
   @Mock private ChangeResource changeResource;
@@ -105,6 +107,34 @@ public class AiReviewPermissionTest extends TestBase {
   }
 
   @Test
+  public void projectAllowOverridesInheritedDeny() {
+    setupMatchingAccessSections(
+        matcher(ALL_PROJECTS, accessSectionWithRule(PermissionRule.Action.DENY), null),
+        matcher(PROJECT_NAME, accessSectionWithRule(PermissionRule.Action.ALLOW), null));
+
+    assertFalse(
+        aiReviewPermission.isAiReviewExplicitlyDisallowed(PROJECT_NAME, "myBranchName"));
+  }
+
+  @Test
+  public void projectAllowDoesNotOverrideInheritedBlock() {
+    setupMatchingAccessSections(
+        matcher(ALL_PROJECTS, accessSectionWithRule(PermissionRule.Action.BLOCK), null),
+        matcher(PROJECT_NAME, accessSectionWithRule(PermissionRule.Action.ALLOW), null));
+
+    assertTrue(aiReviewPermission.isAiReviewExplicitlyDisallowed(PROJECT_NAME, "myBranchName"));
+  }
+
+  @Test
+  public void projectDenyOverridesInheritedAllow() {
+    setupMatchingAccessSections(
+        matcher(ALL_PROJECTS, accessSectionWithRule(PermissionRule.Action.ALLOW), null),
+        matcher(PROJECT_NAME, accessSectionWithRule(PermissionRule.Action.DENY), null));
+
+    assertTrue(aiReviewPermission.isAiReviewExplicitlyDisallowed(PROJECT_NAME, "myBranchName"));
+  }
+
+  @Test
   public void denyAiReviewRuleForUnrelatedGroupAllowsReviewForCurrentUser() {
     setupMatchingAccessSection(accessSectionWithRule(PermissionRule.Action.DENY), currentUser);
     when(currentUser.getEffectiveGroups()).thenReturn(groupMembership);
@@ -139,10 +169,21 @@ public class AiReviewPermissionTest extends TestBase {
   }
 
   private void setupMatchingAccessSection(AccessSection accessSection, CurrentUser user) {
+    setupMatchingAccessSections(matcher(PROJECT_NAME, accessSection, user));
+  }
+
+  private void setupMatchingAccessSections(SectionMatcher... sectionMatchers) {
     when(projectCache.get(PROJECT_NAME)).thenReturn(Optional.of(projectState));
-    when(projectState.getAllSections()).thenReturn(List.of(sectionMatcher));
-    when(sectionMatcher.match("refs/heads/myBranchName", user)).thenReturn(true);
-    when(sectionMatcher.getSection()).thenReturn(accessSection);
+    when(projectState.getAllSections()).thenReturn(List.of(sectionMatchers));
+  }
+
+  private SectionMatcher matcher(
+      Project.NameKey projectNameKey, AccessSection accessSection, CurrentUser user) {
+    SectionMatcher matcher = mock(SectionMatcher.class);
+    when(matcher.match("refs/heads/myBranchName", user)).thenReturn(true);
+    when(matcher.getProject()).thenReturn(projectNameKey);
+    when(matcher.getSection()).thenReturn(accessSection);
+    return matcher;
   }
 
   private AccessSection accessSectionWithRule(PermissionRule.Action action) {

@@ -69,11 +69,15 @@ public class AiReviewPermission {
               projectState ->
                   projectState.getAllSections().stream()
                       .filter(sectionMatcher -> matchesAny(sectionMatcher, refName, user))
-                      .map(SectionMatcher::getSection)
-                      .map(this::getAiReviewPermission)
-                      .filter(permission -> permission != null)
-                      .flatMap(permission -> permission.getRules().stream())
-                      .anyMatch(rule -> isDisallowRuleForUser(rule, user)))
+                      .collect(
+                          AiReviewAccessDecision::new,
+                          (decision, sectionMatcher) ->
+                              decision.withRules(
+                                  projectNameKey.equals(sectionMatcher.getProject()),
+                                  getAiReviewPermission(sectionMatcher.getSection()),
+                                  user),
+                          AiReviewAccessDecision::merge)
+                      .isDisallowed())
           .orElse(false);
     } catch (RuntimeException e) {
       log.warn(
@@ -85,12 +89,50 @@ public class AiReviewPermission {
     }
   }
 
-  private boolean isDisallowRuleForUser(PermissionRule rule, CurrentUser user) {
-    return (rule.isDeny() || rule.isBlock()) && appliesToUser(rule, user);
-  }
-
   private boolean appliesToUser(PermissionRule rule, CurrentUser user) {
     return user == null || user.getEffectiveGroups().contains(rule.getGroup().getUUID());
+  }
+
+  private class AiReviewAccessDecision {
+    private boolean hasBlock;
+    private boolean hasLocalDeny;
+    private boolean hasInheritedDeny;
+    private boolean hasLocalAllow;
+
+    void withRules(boolean localProject, Permission permission, CurrentUser user) {
+      if (permission == null) {
+        return;
+      }
+
+      permission.getRules().stream()
+          .filter(rule -> appliesToUser(rule, user))
+          .forEach(rule -> applyRule(localProject, rule));
+    }
+
+    void merge(AiReviewAccessDecision other) {
+      hasBlock |= other.hasBlock;
+      hasLocalDeny |= other.hasLocalDeny;
+      hasInheritedDeny |= other.hasInheritedDeny;
+      hasLocalAllow |= other.hasLocalAllow;
+    }
+
+    boolean isDisallowed() {
+      return hasBlock || hasLocalDeny || hasInheritedDeny && !hasLocalAllow;
+    }
+
+    private void applyRule(boolean localProject, PermissionRule rule) {
+      if (rule.isBlock()) {
+        hasBlock = true;
+      } else if (rule.isDeny()) {
+        if (localProject) {
+          hasLocalDeny = true;
+        } else {
+          hasInheritedDeny = true;
+        }
+      } else if (localProject && rule.getAction() == PermissionRule.Action.ALLOW) {
+        hasLocalAllow = true;
+      }
+    }
   }
 
   private Permission getAiReviewPermission(AccessSection section) {
@@ -153,5 +195,4 @@ public class AiReviewPermission {
     }
     return false;
   }
-
 }
