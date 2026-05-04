@@ -61,7 +61,6 @@ public class Configuration extends ConfigCore {
   private static final boolean DEFAULT_REVIEW_COMMIT_MESSAGES = true;
   private static final boolean DEFAULT_FULL_FILE_REVIEW = true;
   private static final String DEFAULT_CODE_CONTEXT_POLICY = "ON_DEMAND";
-  private static final String DEFAULT_CODE_CONTEXT_ON_DEMAND_BASE_PATH = "";
   private static final String DEFAULT_DISABLED_TOPIC_FILTER = "";
   private static final String DEFAULT_ENABLED_TOPIC_FILTER = ENABLED_TOPICS_ALL;
   private static final String DEFAULT_ENABLED_FILE_EXTENSIONS =
@@ -124,7 +123,6 @@ public class Configuration extends ConfigCore {
   private static final String KEY_REVIEW_PATCH_SET = "aiReviewPatchSet";
   private static final String KEY_FULL_FILE_REVIEW = "aiFullFileReview";
   private static final String KEY_CODE_CONTEXT_POLICY = "codeContextPolicy";
-  private static final String KEY_CODE_CONTEXT_ON_DEMAND_BASE_PATH = "codeContextOnDemandBasePath";
   private static final String KEY_DISABLED_TOPIC_FILTER = "disabledTopicFilter";
   private static final String KEY_ENABLED_TOPIC_FILTER = "enabledTopicFilter";
   private static final String KEY_MAX_REVIEW_LINES = "maxReviewLines";
@@ -248,11 +246,6 @@ public class Configuration extends ConfigCore {
 
   public CodeContextPolicies getCodeContextPolicy() {
     return getEnum(KEY_CODE_CONTEXT_POLICY, DEFAULT_CODE_CONTEXT_POLICY, CodeContextPolicies.class);
-  }
-
-  public String getCodeContextOnDemandBasePath() {
-    return getString(
-        KEY_CODE_CONTEXT_ON_DEMAND_BASE_PATH, DEFAULT_CODE_CONTEXT_ON_DEMAND_BASE_PATH);
   }
 
   public List<String> getDisabledTopicFilter() {

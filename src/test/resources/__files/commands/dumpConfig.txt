@@ -21,7 +21,6 @@ aiReviewPatchSet: true
 aiReviewTemperature: 0.2
 aiSystemPromptInstructions: Act as a PatchSet Reviewer
 aiUploadedChunkSizeMb: 5
-codeContextOnDemandBasePath: 
 codeContextPolicy: ON_DEMAND
 convertNeutralReviewScoreToPositive: true
 directive: 
