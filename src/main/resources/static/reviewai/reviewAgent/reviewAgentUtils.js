@@ -226,7 +226,6 @@
     entryKey,
     isAssistantEntry,
     isDynamicConfigurationEntry,
-    orderAgentEntries,
     orderAssistantEntriesWithinTurns,
     isCommandPrompt,
     isDirectResponsePrompt,
