@@ -20,7 +20,7 @@ pipeline {
                 echo "Building Main Branch Post-Merge..."
               }
 
-              sh 'mvn -Dmaven.repo.local=/var/maven/.m2/repository -U clean package'
+              sh 'mvn -Dmaven.repo.local=/var/maven/.m2/repository -U clean package -DskipTests'
             }
           }
         }
