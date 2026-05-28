@@ -16,11 +16,16 @@
 
 package com.googlesource.gerrit.plugins.reviewai;
 
+import com.google.gerrit.extensions.registration.DynamicItem;
 import com.google.gerrit.extensions.restapi.RestApiModule;
+import com.google.gerrit.server.avatar.AvatarProvider;
 import com.google.gerrit.server.change.ChangeResource;
 import com.google.gerrit.server.events.EventListener;
 import com.google.inject.AbstractModule;
+import com.google.inject.Inject;
 import com.google.inject.multibindings.Multibinder;
+import com.googlesource.gerrit.plugins.reviewai.avatar.ReviewAiAvatarPluginDetector;
+import com.googlesource.gerrit.plugins.reviewai.avatar.ReviewAiAvatarProvider;
 import com.googlesource.gerrit.plugins.reviewai.listener.GerritListener;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewHistory;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewMessage;
@@ -28,12 +33,23 @@ import com.googlesource.gerrit.plugins.reviewai.web.AiReviewMessageStatus;
 import com.googlesource.gerrit.plugins.reviewai.web.ReviewAgentConversations;
 import com.googlesource.gerrit.plugins.reviewai.web.ReviewAgentModel;
 
+/** Configures ReviewAI listeners, REST endpoints, and optional avatar integration. */
 public class Module extends AbstractModule {
+  private final ReviewAiAvatarPluginDetector avatarPluginDetector;
+
+  @Inject
+  public Module(ReviewAiAvatarPluginDetector avatarPluginDetector) {
+    this.avatarPluginDetector = avatarPluginDetector;
+  }
+
   @Override
   protected void configure() {
     Multibinder<EventListener> eventListenerBinder =
         Multibinder.newSetBinder(binder(), EventListener.class);
     eventListenerBinder.addBinding().to(GerritListener.class);
+    if (avatarPluginDetector.isAvatarsGravatarAvailable()) {
+      DynamicItem.bind(binder(), AvatarProvider.class).to(ReviewAiAvatarProvider.class);
+    }
 
     install(
         new RestApiModule() {

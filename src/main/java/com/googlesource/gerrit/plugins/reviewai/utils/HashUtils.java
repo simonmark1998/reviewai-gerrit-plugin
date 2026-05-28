@@ -60,16 +60,24 @@ public class HashUtils {
         hex.substring(20, 32));
   }
 
+  public static String md5Hex(String data) {
+    return digestHex("MD5", data);
+  }
+
   private static String sha1(String data) {
+    String hexResult = digestHex("SHA-1", data);
+    log.debug("SHA-1 hash in hex: {}", hexResult);
+    return hexResult;
+  }
+
+  private static String digestHex(String algorithm, String data) {
     try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-1");
+      MessageDigest digest = MessageDigest.getInstance(algorithm);
       byte[] hashBytes = digest.digest(data.getBytes(StandardCharsets.UTF_8));
-      String hexResult = bytesToHex(hashBytes);
-      log.debug("SHA-1 hash in hex: {}", hexResult);
-      return hexResult;
+      return bytesToHex(hashBytes);
     } catch (NoSuchAlgorithmException e) {
-      log.error("Failed to find SHA-1 hashing algorithm", e);
-      throw new RuntimeException("SHA-1 algorithm not found", e);
+      log.error("Failed to find {} hashing algorithm", algorithm, e);
+      throw new RuntimeException(algorithm + " algorithm not found", e);
     }
   }
 

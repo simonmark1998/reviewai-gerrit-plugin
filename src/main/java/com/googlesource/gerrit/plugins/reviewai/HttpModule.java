@@ -19,10 +19,13 @@ package com.googlesource.gerrit.plugins.reviewai;
 import com.google.gerrit.extensions.registration.DynamicSet;
 import com.google.gerrit.extensions.webui.WebUiPlugin;
 import com.google.inject.servlet.ServletModule;
+import com.googlesource.gerrit.plugins.reviewai.avatar.ReviewAiAvatarProvider;
+import com.googlesource.gerrit.plugins.reviewai.avatar.ReviewAiAvatarServlet;
 
 public class HttpModule extends ServletModule {
   @Override
   protected void configureServlets() {
     DynamicSet.bind(binder(), WebUiPlugin.class).toInstance(WebUiPlugin.js("init.js"));
+    serve("/" + ReviewAiAvatarProvider.AVATAR_ENDPOINT_PATH).with(ReviewAiAvatarServlet.class);
   }
 }
