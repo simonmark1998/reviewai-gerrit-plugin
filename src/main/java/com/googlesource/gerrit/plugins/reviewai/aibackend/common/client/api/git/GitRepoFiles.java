@@ -52,12 +52,12 @@ public class GitRepoFiles {
     gitFileChunkBuilder = new GitFileChunkBuilder(config);
     enabledFileExtensions = config.getEnabledFileExtensions();
     try (Repository repository = openRepository(change)) {
-      List<Map<String, String>> chunkedFileContent = listFilesWithContent(repository);
+      List<Map<String, String>> chunkedFileContent = listFilesWithContent(repository, change);
       return chunkedFileContent.stream()
           .map(chunk -> getGson().toJson(chunk))
           .collect(Collectors.toList());
     } catch (IOException | GitAPIException e) {
-      throw new RuntimeException("Failed to retrieve files in master branch: ", e);
+      throw new RuntimeException("Failed to retrieve files from change branch: ", e);
     }
   }
 
@@ -77,7 +77,7 @@ public class GitRepoFiles {
   public String getFileContent(GerritChange change, String path) throws FileNotFoundException {
     try (Repository repository = openRepository(change);
         ObjectReader reader = repository.newObjectReader()) {
-      RevTree tree = getMasterRevTree(repository);
+      RevTree tree = getBranchRevTree(repository, change);
       String content = readFileContent(reader, tree, path);
       if (content != null) {
         return content;
@@ -96,7 +96,7 @@ public class GitRepoFiles {
     try (Repository repository = openRepository(change)) {
       List<String> paths = new ArrayList<>();
       try (TreeWalk treeWalk = new TreeWalk(repository)) {
-        treeWalk.addTree(getMasterRevTree(repository));
+        treeWalk.addTree(getBranchRevTree(repository, change));
         treeWalk.setRecursive(true);
 
         while (treeWalk.next()) {
@@ -120,7 +120,7 @@ public class GitRepoFiles {
     }
     try (Repository repository = openRepository(change);
         ObjectReader reader = repository.newObjectReader()) {
-      RevTree tree = getMasterRevTree(repository);
+      RevTree tree = getBranchRevTree(repository, change);
       List<String> matches = new ArrayList<>();
       try (TreeWalk treeWalk = new TreeWalk(repository)) {
         treeWalk.addTree(tree);
@@ -139,9 +139,9 @@ public class GitRepoFiles {
     }
   }
 
-  private List<Map<String, String>> listFilesWithContent(Repository repository)
+  private List<Map<String, String>> listFilesWithContent(Repository repository, GerritChange change)
       throws IOException, GitAPIException {
-    Map<String, List<FileEntry>> dirFilesMap = getDirFilesMap(repository, TreeFilter.ANY_DIFF);
+    Map<String, List<FileEntry>> dirFilesMap = getDirFilesMap(repository, change, TreeFilter.ANY_DIFF);
     for (Map.Entry<String, List<FileEntry>> entry : dirFilesMap.entrySet()) {
       String dirPath = entry.getKey();
       log.debug("File from dirFilesMap processed: {}", dirPath);
@@ -152,12 +152,12 @@ public class GitRepoFiles {
     return gitFileChunkBuilder.getChunks();
   }
 
-  private Map<String, List<FileEntry>> getDirFilesMap(Repository repository, TreeFilter filter)
-      throws IOException {
+  private Map<String, List<FileEntry>> getDirFilesMap(
+      Repository repository, GerritChange change, TreeFilter filter) throws IOException {
     Map<String, List<FileEntry>> dirFilesMap = new LinkedHashMap<>();
 
     try (ObjectReader reader = repository.newObjectReader()) {
-      RevTree tree = getMasterRevTree(repository);
+      RevTree tree = getBranchRevTree(repository, change);
 
       try (TreeWalk treeWalk = new TreeWalk(repository)) {
         treeWalk.addTree(tree);
@@ -194,13 +194,14 @@ public class GitRepoFiles {
         .build();
   }
 
-  private RevTree getMasterRevTree(Repository repository) throws IOException {
-    ObjectId lastCommitId = repository.resolve(Constants.R_HEADS + "master");
+  RevTree getBranchRevTree(Repository repository, GerritChange change) throws IOException {
+    String branchRef = change.getBranchNameKey().branch();
+    ObjectId lastCommitId = repository.resolve(branchRef);
+    if (lastCommitId == null) {
+      throw new IOException("Branch not found: " + branchRef);
+    }
     try (RevWalk revWalk = new RevWalk(repository)) {
       return revWalk.parseCommit(lastCommitId).getTree();
-    } catch (NullPointerException e) {
-      log.warn("Error retrieving Master Rev Tree for ID `{}`", lastCommitId, e);
-      throw new IOException(e);
     }
   }
 
