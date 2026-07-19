@@ -5,170 +5,30 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.googlesource.gerrit.plugins</groupId>
-    <artifactId>reviewai-gerrit-plugin</artifactId>
+    <artifactId>ai-code-review</artifactId>
     <packaging>jar</packaging>
-    <version>4.0.0</version>
-
+    <version>3.13.0</version>
     <properties>
         <Gerrit-ApiType>plugin</Gerrit-ApiType>
-        <Gerrit-ApiVersion>3.13.1</Gerrit-ApiVersion>
+        <Gerrit-ApiVersion>3.13.5</Gerrit-ApiVersion>
         <maven.test.skip>false</maven.test.skip>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <checkstyle.version>3.6.0</checkstyle.version>
-        <pmd.version>3.26.0</pmd.version>
-        <spotbugs.version>4.8.6.6</spotbugs.version>
-        <frontend-maven.version>1.15.0</frontend-maven.version>
     </properties>
-
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Amarula Maven Packages</name>
-            <url>https://maven.pkg.github.com/amarula/chatgpt-code-review-gerrit-plugin</url>
-        </repository>
-    </distributionManagement>
     <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>false</filtering>
-                <excludes>
-                    <exclude>static/init.js</exclude>
-                </excludes>
-            </resource>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-                <includes>
-                    <include>static/init.js</include>
-                </includes>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>${checkstyle.version}</version>
-                <configuration>
-                    <configLocation>google_checks.xml</configLocation>
-                    <consoleOutput>false</consoleOutput>
-                    <failsOnError>true</failsOnError>
-                    <linkXRef>false</linkXRef>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>validate</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-pmd-plugin</artifactId>
-                <version>${pmd.version}</version>
-                <configuration>
-                    <linkXRef>false</linkXRef>
-                    <minimumTokens>100</minimumTokens>
-                    <targetJdk>21</targetJdk>
-                    <printFailingErrors>true</printFailingErrors>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>pmd-check</id>
-                        <goals>
-                            <goal>check</goal>
-                            <goal>cpd-check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>${spotbugs.version}</version>
-                <configuration>
-                    <effort>Max</effort>
-                    <threshold>Low</threshold>
-                    <xmlOutput>true</xmlOutput>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>${frontend-maven.version}</version>
-                <executions>
-                    <execution>
-                        <id>install node and npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <configuration>
-                            <nodeVersion>v20.11.0</nodeVersion>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>npm install</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>install</arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>eslint</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>run lint</arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>3.3.1</version>
-                <configuration>
-                    <useDefaultDelimiters>false</useDefaultDelimiters>
-                    <delimiters>
-                        <delimiter>@</delimiter>
-                    </delimiters>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.4.2</version>
+                <version>3.2.2</version>
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Gerrit-PluginName>reviewai-gerrit-plugin</Gerrit-PluginName>
-                            <Gerrit-Module>com.googlesource.gerrit.plugins.reviewai.Module</Gerrit-Module>
-                            <Gerrit-HttpModule>com.googlesource.gerrit.plugins.reviewai.HttpModule</Gerrit-HttpModule>
+                            <Gerrit-PluginName>ai-code-review</Gerrit-PluginName>
+                            <Gerrit-Module>com.googlesource.gerrit.plugins.aicodereview.Module</Gerrit-Module>
 
-                            <Implementation-Vendor>Amarula</Implementation-Vendor>
-                            <Implementation-URL>
-                                https://github.com/amarula/reviewai-gerrit-plugin
-                            </Implementation-URL>
+                            <Implementation-Vendor>OpenSource Gerrit Plugin</Implementation-Vendor>
+                            <Implementation-URL>https://gerrit.googlesource.com/plugins/ai-code-review</Implementation-URL>
 
-                            <Implementation-Title>ChatGPT Code Review Gerrit Plugin</Implementation-Title>
+                            <Implementation-Title>AI Code Review Gerrit Plugin</Implementation-Title>
                             <Implementation-Version>${project.version}</Implementation-Version>
 
                             <Gerrit-ApiType>${Gerrit-ApiType}</Gerrit-ApiType>
@@ -181,30 +41,23 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.0</version>
+                <version>3.8.1</version>
                 <configuration>
                     <release>21</release>
                     <encoding>UTF-8</encoding>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>1.18.40</version>
-                        </path>
-                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.3</version>
+                <version>2.22.2</version>
             </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.5.1</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -215,29 +68,18 @@
                             <createDependencyReducedPom>true</createDependencyReducedPom>
                             <artifactSet>
                                 <includes>
-                                    <include>com.openai*</include>
                                     <include>com.squareup.*</include>
-                                    <include>io.swagger.core*</include>
-                                    <include>org.apache.commons*</include>
                                     <include>org.jetbrains*</include>
-                                    <include>com.knuddels*</include>
-                                    <include>com.github.victools*</include>
-                                    <include>dev.langchain4j*</include>
-                                    <include>com.fasterxml.jackson*</include>
                                 </includes>
                             </artifactSet>
                             <relocations>
                                 <relocation>
                                     <pattern>okhttp3</pattern>
-                                    <shadedPattern>com.googlesource.gerrit.plugins.reviewai.okhttp3</shadedPattern>
+                                    <shadedPattern>com.googlesource.gerrit.plugins.aicodereview.okhttp3</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>okio</pattern>
-                                    <shadedPattern>com.googlesource.gerrit.plugins.reviewai.okio</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>com.googlesource.gerrit.plugins.aireview.jackson</shadedPattern>
+                                    <shadedPattern>com.googlesource.gerrit.plugins.aicodereview.okio</shadedPattern>
                                 </relocation>
                             </relocations>
                             <filters>
@@ -250,23 +92,17 @@
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>META-INF/*.MF</exclude>
                                         <exclude>META-INF/license/*</exclude>
-                                        <exclude>META-INF/okio.kotlin_module</exclude>
-                                        <exclude>META-INF/versions/9/module-info.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
                             <transformers>
-                                <transformer
-                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Gerrit-PluginName>reviewai-gerrit-plugin</Gerrit-PluginName>
-                                        <Gerrit-Module>com.googlesource.gerrit.plugins.reviewai.Module</Gerrit-Module>
-                                        <Gerrit-HttpModule>com.googlesource.gerrit.plugins.reviewai.HttpModule</Gerrit-HttpModule>
-                                        <Implementation-Vendor>Amarula</Implementation-Vendor>
-                                        <Implementation-URL>
-                                            https://github.com/amarula/reviewai-gerrit-plugin
-                                        </Implementation-URL>
-                                        <Implementation-Title>ChatGPT Code Review Gerrit Plugin</Implementation-Title>
+                                        <Gerrit-PluginName>ai-code-review</Gerrit-PluginName>
+                                        <Gerrit-Module>com.googlesource.gerrit.plugins.aicodereview.Module</Gerrit-Module>
+                                        <Implementation-Vendor>OpenSource Gerrit Plugin</Implementation-Vendor>
+                                        <Implementation-URL>https://gerrit.googlesource.com/plugins/ai-code-review</Implementation-URL>
+                                        <Implementation-Title>AI Code Review Gerrit Plugin</Implementation-Title>
                                         <Implementation-Version>${project.version}</Implementation-Version>
                                         <Gerrit-ApiType>${Gerrit-ApiType}</Gerrit-ApiType>
                                         <Gerrit-ApiVersion>${Gerrit-ApiVersion}</Gerrit-ApiVersion>
@@ -277,28 +113,33 @@
                     </execution>
                 </executions>
             </plugin>
+
             <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <groupId>com.spotify.fmt</groupId>
+                <artifactId>fmt-maven-plugin</artifactId>
+                <version>2.25</version>
                 <executions>
                     <execution>
-                        <id>prepare-agent</id>
                         <goals>
-                            <goal>prepare-agent</goal>
+                            <goal>format</goal>
                         </goals>
                     </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- we need to control the bytebuddy being brought in by mockito-inline, to move it
+            to a version which support JDK21 which starts at 1.14.17+ -->
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>1.14.17</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -307,62 +148,21 @@
             <version>${Gerrit-ApiVersion}</version>
         </dependency>
         <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j</artifactId>
-            <version>1.13.0</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai</artifactId>
-            <version>1.13.0</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-google-ai-gemini</artifactId>
-            <version>1.13.0</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-ollama</artifactId>
-            <version>1.13.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.openai</groupId>
-            <artifactId>openai-java-client-okhttp</artifactId>
-            <version>4.31.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <version>2.2.224</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-collections4</artifactId>
-            <version>4.5.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.17</version>
+            <version>1.7.30</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.40</version>
+            <version>1.18.34</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.18</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
-            <version>1.5.18</version>
+            <version>1.2.11</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -373,45 +173,21 @@
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>5.19.0</version>
+            <artifactId>mockito-inline</artifactId>
+            <version>5.2.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.wiremock</groupId>
+            <groupId>com.github.tomakehurst</groupId>
             <artifactId>wiremock-standalone</artifactId>
-            <version>3.13.1</version>
+            <version>3.0.1</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.1.0</version>
         </dependency>
     </dependencies>
 
-    <reporting>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>${checkstyle.version}</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-pmd-plugin</artifactId>
-                <version>${pmd.version}</version>
-            </plugin>
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>${spotbugs.version}</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.3</version>
-                <configuration>
-                    <redirectTestOutputToFile>true</redirectTestOutputToFile>
-                    <testFailureIgnore>true</testFailureIgnore>
-                    <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-                </configuration>
-            </plugin>
-        </plugins>
-    </reporting>
 </project>

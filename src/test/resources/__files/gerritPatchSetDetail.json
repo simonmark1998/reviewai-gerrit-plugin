@@ -10,8 +10,8 @@
             "max": 1
           },
           "_account_id": 1000001,
-          "name": "OpenAI",
-          "display_name": "OpenAI",
+          "name": "ChatGPT",
+          "display_name": "ChatGPT",
           "username": "gpt"
         }
       ],
@@ -56,8 +56,8 @@
       "id": "eebb61ec790c5cb3bfaa1be74f07ceae4c00b94e",
       "author": {
         "_account_id": 1000000,
-        "name": "OpenAI",
-        "display_name": "OpenAI",
+        "name": "ChatGPT",
+        "display_name": "ChatGPT",
         "email": "gpt@amarulasolutions.com",
         "username": "gpt"
       },
@@ -84,8 +84,8 @@
       "id": "5f915c7d277a0ebc596e9734f0f1704a911d85c6",
       "author": {
         "_account_id": 1000000,
-        "name": "OpenAI",
-        "display_name": "OpenAI",
+        "name": "ChatGPT",
+        "display_name": "ChatGPT",
         "email": "gpt@amarulasolutions.com",
         "username": "gpt"
       },
@@ -95,25 +95,11 @@
       "_revision_number": 1
     },
     {
-      "id": "f326e410e9fcfaa24039ee61a249cb24c147ff70",
-      "author": {
-        "_account_id": 1000000,
-        "name": "OpenAI",
-        "display_name": "OpenAI",
-        "email": "gpt@amarulasolutions.com",
-        "username": "gpt"
-      },
-      "date": "2024-04-29 12:52:17.000000000",
-      "message": "ReviewAI Message: No update to show for this Change Set",
-      "accounts_in_message": [],
-      "_revision_number": 1
-    },
-    {
       "id": "dbbcc20a0073cfc65c792187e0eef802c3112489",
       "author": {
         "_account_id": 1000000,
-        "name": "OpenAI",
-        "display_name": "OpenAI",
+        "name": "ChatGPT",
+        "display_name": "ChatGPT",
         "email": "gpt@amarulasolutions.com",
         "username": "gpt"
       },

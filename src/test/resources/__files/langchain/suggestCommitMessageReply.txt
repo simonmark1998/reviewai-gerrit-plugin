@@ -1,5 +1,0 @@
-```suggestion
-Fix module and class name splitting
-
-Use the intended split depth when resolving a class name.
-```
