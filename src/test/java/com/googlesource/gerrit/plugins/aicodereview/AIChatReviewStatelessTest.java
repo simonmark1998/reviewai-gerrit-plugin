@@ -26,14 +26,19 @@ import static org.mockito.Mockito.when;
 
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.net.HttpHeaders;
+import com.google.gerrit.extensions.api.changes.ChangeApi;
+import com.google.gerrit.extensions.api.changes.Changes;
 import com.google.gerrit.extensions.api.changes.FileApi;
 import com.google.gerrit.extensions.api.changes.ReviewInput;
+import com.google.gerrit.extensions.api.changes.RevisionApi;
+import com.google.gerrit.extensions.common.ChangeInfo;
 import com.google.gerrit.extensions.common.DiffInfo;
 import com.google.gerrit.extensions.common.FileInfo;
 import com.google.gerrit.extensions.restapi.RestApiException;
 import com.google.gerrit.json.OutputFormat;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.googlesource.gerrit.plugins.aicodereview.listener.EventHandlerTask;
 import com.googlesource.gerrit.plugins.aicodereview.listener.EventHandlerTask.SupportedEvents;
 import com.googlesource.gerrit.plugins.aicodereview.mode.stateless.client.api.UriResourceLocatorStateless;
@@ -41,6 +46,7 @@ import com.googlesource.gerrit.plugins.aicodereview.mode.stateless.client.prompt
 import com.googlesource.gerrit.plugins.aicodereview.settings.Settings;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.reflect.TypeLiteral;
@@ -296,6 +302,90 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
             "__files/stateless/gerritPatchSetReviewJsonContent.json", ReviewInput.class);
     Gson gson = OutputFormat.JSON_COMPACT.newGson();
     Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
+  @Test
+  public void patchSetCreatedTopicReplyIsSubmittedToTargetChange() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    String topic = "topic-review";
+    String relatedChangeId = "myProject~myBranchName~relatedChangeId";
+    ChangeInfo currentInfo =
+        readTestFileToClass("__files/gerritPatchSetDetail.json", ChangeInfo.class);
+    currentInfo.topic = topic;
+    currentInfo.project = PROJECT_NAME.get();
+    currentInfo.branch = BRANCH_NAME.shortName();
+    currentInfo.changeId = CHANGE_ID.get();
+    when(changeApiMock.get()).thenReturn(currentInfo);
+
+    ChangeInfo relatedInfo = new ChangeInfo();
+    relatedInfo.project = PROJECT_NAME.get();
+    relatedInfo.branch = BRANCH_NAME.shortName();
+    relatedInfo.changeId = "relatedChangeId";
+    Changes.QueryRequest queryRequest = mock(Changes.QueryRequest.class);
+    when(changesMock.query("topic:\"" + topic + "\" status:open")).thenReturn(queryRequest);
+    when(queryRequest.get()).thenReturn(List.of(currentInfo, relatedInfo));
+
+    Map<String, FileInfo> files =
+        readTestFileToType(
+            "__files/stateless/gerritPatchSetFiles.json",
+            new TypeLiteral<Map<String, FileInfo>>() {}.getType());
+    DiffInfo testFileDiff =
+        readTestFileToClass("__files/stateless/gerritPatchSetDiffTestFile.json", DiffInfo.class);
+    ChangeApi relatedChangeApi = mock(ChangeApi.class);
+    RevisionApi relatedRevisionApi = mock(RevisionApi.class);
+    FileApi relatedTestFileMock = mock(FileApi.class);
+    when(changesMock.id(PROJECT_NAME.get(), BRANCH_NAME.shortName(), "relatedChangeId"))
+        .thenReturn(relatedChangeApi);
+    when(relatedChangeApi.current()).thenReturn(relatedRevisionApi);
+    when(relatedRevisionApi.files(0)).thenReturn(Map.of("test_file.py", files.get("test_file.py")));
+    when(relatedRevisionApi.file("test_file.py")).thenReturn(relatedTestFileMock);
+    when(relatedTestFileMock.diff(0)).thenReturn(testFileDiff);
+    when(relatedRevisionApi.review(Mockito.any(ReviewInput.class))).thenReturn(reviewResult);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseTopicRelatedJsonContent.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    Mockito.verify(revisionApiMock, Mockito.never()).review(Mockito.any(ReviewInput.class));
+    ArgumentCaptor<ReviewInput> relatedReviewInputCaptor =
+        ArgumentCaptor.forClass(ReviewInput.class);
+    verify(relatedRevisionApi).review(relatedReviewInputCaptor.capture());
+    ReviewInput reviewInput = relatedReviewInputCaptor.getValue();
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Topic-related change inline comment.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertNull(comment.range);
+    Assert.assertEquals(Short.valueOf((short) -1), reviewInput.labels.get("Code-Review"));
+
+    gptRequestBody =
+        OutputFormat.JSON_COMPACT
+            .newGson()
+            .fromJson(patchSetReviewer.getChatAIClient().getRequestBody(), JsonObject.class);
+    String userPrompt =
+        gptRequestBody
+            .get("messages")
+            .getAsJsonArray()
+            .get(1)
+            .getAsJsonObject()
+            .get("content")
+            .getAsString();
+    Assert.assertTrue(userPrompt.contains("\"changeId\":\"" + relatedChangeId + "\""));
+    Assert.assertTrue(userPrompt.contains("\"files\""));
   }
 
   @Test

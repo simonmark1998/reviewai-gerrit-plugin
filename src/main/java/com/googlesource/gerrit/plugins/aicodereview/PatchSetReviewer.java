@@ -44,8 +44,11 @@ import com.googlesource.gerrit.plugins.aicodereview.settings.Settings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -67,6 +70,7 @@ public class PatchSetReviewer {
   private List<ReviewBatch> reviewBatches;
   private List<GerritComment> commentProperties;
   private List<Integer> reviewScores;
+  private Map<String, List<Integer>> reviewScoresByChange;
 
   @Inject
   PatchSetReviewer(
@@ -95,6 +99,7 @@ public class PatchSetReviewer {
         changeSetData.getForcedReview());
     reviewBatches = new ArrayList<>();
     reviewScores = new ArrayList<>();
+    reviewScoresByChange = new LinkedHashMap<>();
     commentProperties = gerritClient.getClientData(change).getCommentProperties();
     gerritCommentRange = new GerritCommentRange(gerritClient, change);
     String patchSet = gerritClient.getPatchSet(change);
@@ -139,14 +144,57 @@ public class PatchSetReviewer {
           summarize(changeSetData.getReviewSystemMessage()),
           changeSetData.shouldHideAICodeReview());
     }
-    Integer reviewScore = getReviewScore(change);
+    submitReviewsByChange(change);
+  }
+
+  private void submitReviewsByChange(GerritChange defaultChange) throws Exception {
+    Map<String, List<ReviewBatch>> reviewBatchesByChange = getReviewBatchesByChange(defaultChange);
+    if (reviewBatchesByChange.isEmpty()) {
+      reviewBatchesByChange.put(defaultChange.getFullChangeId(), new ArrayList<>());
+    }
+    for (String changeId : reviewScoresByChange.keySet()) {
+      reviewBatchesByChange.putIfAbsent(changeId, new ArrayList<>());
+    }
+    for (Map.Entry<String, List<ReviewBatch>> entry : reviewBatchesByChange.entrySet()) {
+      GerritChange targetChange = getTargetChange(entry.getKey(), defaultChange);
+      List<ReviewBatch> targetReviewBatches = entry.getValue();
+      List<Integer> targetReviewScores =
+          reviewScoresByChange.getOrDefault(entry.getKey(), Collections.emptyList());
+      Integer reviewScore = getReviewScore(targetChange, targetReviewBatches, targetReviewScores);
+      log.debug(
+          "Submitting Gerrit review from pipeline: sourceChange={}, targetChange={}, reviewBatches={}, reviewScores={}, finalReviewScore={}",
+          defaultChange.getFullChangeId(),
+          targetChange.getFullChangeId(),
+          targetReviewBatches.size(),
+          targetReviewScores,
+          reviewScore);
+      clientReviewProvider
+          .get()
+          .setReview(targetChange, targetReviewBatches, changeSetData, reviewScore);
+    }
+  }
+
+  private Map<String, List<ReviewBatch>> getReviewBatchesByChange(GerritChange defaultChange) {
+    Map<String, List<ReviewBatch>> reviewBatchesByChange = new LinkedHashMap<>();
+    for (ReviewBatch reviewBatch : reviewBatches) {
+      String changeId =
+          reviewBatch.getChangeId() == null
+              ? defaultChange.getFullChangeId()
+              : reviewBatch.getChangeId();
+      reviewBatchesByChange.computeIfAbsent(changeId, unused -> new ArrayList<>()).add(reviewBatch);
+    }
     log.debug(
-        "Submitting Gerrit review from pipeline: change={}, reviewBatches={}, reviewScores={}, finalReviewScore={}",
-        change.getFullChangeId(),
-        reviewBatches.size(),
-        reviewScores,
-        reviewScore);
-    clientReviewProvider.get().setReview(change, reviewBatches, changeSetData, reviewScore);
+        "Grouped review batches by target change: sourceChange={}, groups={}",
+        defaultChange.getFullChangeId(),
+        reviewBatchesByChange.keySet());
+    return reviewBatchesByChange;
+  }
+
+  private GerritChange getTargetChange(String changeId, GerritChange defaultChange) {
+    if (changeId == null || changeId.equals(defaultChange.getFullChangeId())) {
+      return defaultChange;
+    }
+    return changeSetData.getReviewChange(changeId).orElseGet(() -> new GerritChange(changeId));
   }
 
   private void setCommentBatchMap(ReviewBatch batchMap, Integer batchID) {
@@ -190,7 +238,8 @@ public class PatchSetReviewer {
 
   private void setPatchSetReviewBatchMap(ReviewBatch batchMap, AIChatReplyItem replyItem) {
     log.debug(
-        "Resolving AI reply location: filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
+        "Resolving AI reply location: changeId={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
+        replyItem.getChangeId(),
         replyItem.getFilename(),
         replyItem.getLineNumber(),
         length(replyItem.getCodeSnippet()),
@@ -233,7 +282,9 @@ public class PatchSetReviewer {
       log.debug(
           "AI response has messageContent but no replies; adding patchset-level batch: {}",
           summarize(reviewReply.getMessageContent()));
-      reviewBatches.add(new ReviewBatch(reviewReply.getMessageContent()));
+      ReviewBatch messageBatch = new ReviewBatch(reviewReply.getMessageContent());
+      messageBatch.setChangeId(resolveMessageContentChangeId(reviewReply, change));
+      reviewBatches.add(messageBatch);
       return;
     }
     if (reviewReply.getReplies() == null) {
@@ -243,11 +294,26 @@ public class PatchSetReviewer {
     List<ReviewBatch> hiddenReviewBatches = new ArrayList<>();
     for (int replyIndex = 0; replyIndex < reviewReply.getReplies().size(); replyIndex++) {
       AIChatReplyItem replyItem = reviewReply.getReplies().get(replyIndex);
+      Optional<String> targetChangeId = resolveTargetChangeId(replyItem, change);
+      if (targetChangeId.isEmpty()) {
+        log.warn(
+            "Skipping AI reply item #{} because target change could not be resolved safely: replyChangeId={}, filename={}, knownReviewChanges={}, fileTargets={}",
+            replyIndex,
+            replyItem.getChangeId(),
+            replyItem.getFilename(),
+            changeSetData.getReviewChanges().keySet(),
+            replyItem.getFilename() == null
+                ? Set.of()
+                : changeSetData.getReviewChangeIdsForFile(replyItem.getFilename()));
+        continue;
+      }
+      replyItem.setChangeId(targetChangeId.get());
       String reply = getReplyText(replyItem);
       log.debug(
-          "Processing AI reply item #{}: replyChars={}, score={}, relevance={}, repeated={}, conflicting={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
+          "Processing AI reply item #{}: replyChars={}, targetChangeId={}, score={}, relevance={}, repeated={}, conflicting={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
           replyIndex,
           length(reply),
+          replyItem.getChangeId(),
           replyItem.getScore(),
           replyItem.getRelevance(),
           replyItem.isRepeated(),
@@ -279,11 +345,15 @@ public class PatchSetReviewer {
       if (!replyItem.isConflicting() && !isIrrelevant && score != null) {
         log.debug("Score added: {}", score);
         reviewScores.add(score);
+        reviewScoresByChange
+            .computeIfAbsent(replyItem.getChangeId(), unused -> new ArrayList<>())
+            .add(score);
       }
       if (changeSetData.getDebugReviewMode()) {
         reply += debugCodeBlocksReview.getDebugCodeBlock(replyItem, isHidden);
       }
       ReviewBatch batchMap = new ReviewBatch(reply);
+      batchMap.setChangeId(replyItem.getChangeId());
       if (change.getIsCommentEvent() && replyItem.getId() != null) {
         setCommentBatchMap(batchMap, replyItem.getId());
       } else {
@@ -291,8 +361,9 @@ public class PatchSetReviewer {
       }
       if (changeSetData.getReplyFilterEnabled() && isHidden) {
         log.debug(
-            "AI reply item #{} hidden by filter but kept for all-hidden fallback: filename={}, line={}, range={}",
+            "AI reply item #{} hidden by filter but kept for all-hidden fallback: changeId={}, filename={}, line={}, range={}",
             replyIndex,
+            batchMap.getChangeId(),
             batchMap.getFilename(),
             batchMap.getLine(),
             batchMap.getRange());
@@ -300,8 +371,9 @@ public class PatchSetReviewer {
         continue;
       }
       log.debug(
-          "AI reply item #{} added to review batches: filename={}, line={}, range={}, message={}",
+          "AI reply item #{} added to review batches: changeId={}, filename={}, line={}, range={}, message={}",
           replyIndex,
+          batchMap.getChangeId(),
           batchMap.getFilename(),
           batchMap.getLine(),
           batchMap.getRange(),
@@ -317,6 +389,61 @@ public class PatchSetReviewer {
         reviewBatches.size(),
         hiddenReviewBatches.size(),
         reviewScores);
+  }
+
+  private String resolveMessageContentChangeId(
+      AIChatResponseContent reviewReply, GerritChange defaultChange) {
+    if (reviewReply.getChangeId() != null
+        && (reviewReply.getChangeId().equals(defaultChange.getFullChangeId())
+            || changeSetData.getReviewChange(reviewReply.getChangeId()).isPresent())) {
+      return reviewReply.getChangeId();
+    }
+    return defaultChange.getFullChangeId();
+  }
+
+  private Optional<String> resolveTargetChangeId(
+      AIChatReplyItem replyItem, GerritChange defaultChange) {
+    String replyChangeId = replyItem.getChangeId();
+    if (replyChangeId != null && !replyChangeId.isBlank()) {
+      if (replyChangeId.equals(defaultChange.getFullChangeId())
+          || changeSetData.getReviewChange(replyChangeId).isPresent()) {
+        return Optional.of(replyChangeId);
+      }
+      if (!changeSetData.hasMultipleReviewChanges()) {
+        log.warn(
+            "AI reply target changeId '{}' is unknown in a single-change review; falling back to {}",
+            replyChangeId,
+            defaultChange.getFullChangeId());
+        return Optional.of(defaultChange.getFullChangeId());
+      }
+      return Optional.empty();
+    }
+
+    if (replyItem.getFilename() != null) {
+      Set<String> fileChangeIds = changeSetData.getReviewChangeIdsForFile(replyItem.getFilename());
+      if (fileChangeIds.size() == 1) {
+        String resolvedChangeId = fileChangeIds.iterator().next();
+        log.debug(
+            "Resolved missing AI reply changeId by unique filename: filename={}, changeId={}",
+            replyItem.getFilename(),
+            resolvedChangeId);
+        return Optional.of(resolvedChangeId);
+      }
+      if (!fileChangeIds.isEmpty()) {
+        log.warn(
+            "AI reply omitted changeId and filename is ambiguous in topic: filename={}, candidateChangeIds={}",
+            replyItem.getFilename(),
+            fileChangeIds);
+        return Optional.empty();
+      }
+    }
+
+    if (changeSetData.hasMultipleReviewChanges()) {
+      log.warn(
+          "AI reply omitted changeId in a topic review and no unique filename target was available");
+      return Optional.empty();
+    }
+    return Optional.of(defaultChange.getFullChangeId());
   }
 
   private String getReplyText(AIChatReplyItem replyItem) {
@@ -362,17 +489,20 @@ public class PatchSetReviewer {
     return chatAIClient.ask(changeSetData, change, patchSet);
   }
 
-  private Integer getReviewScore(GerritChange change) {
+  private Integer getReviewScore(
+      GerritChange change,
+      List<ReviewBatch> targetReviewBatches,
+      List<Integer> targetReviewScores) {
     if (config.isVotingEnabled()) {
       Integer score =
-          reviewScores.isEmpty()
-              ? (change.getIsCommentEvent() || reviewBatches.isEmpty() ? null : 0)
-              : Collections.min(reviewScores);
+          targetReviewScores.isEmpty()
+              ? (change.getIsCommentEvent() || targetReviewBatches.isEmpty() ? null : 0)
+              : Collections.min(targetReviewScores);
       log.debug(
           "Computed Gerrit review score: change={}, votingEnabled=true, collectedScores={}, reviewBatches={}, score={}",
           change.getFullChangeId(),
-          reviewScores,
-          reviewBatches.size(),
+          targetReviewScores,
+          targetReviewBatches.size(),
           score);
       return score;
     } else {

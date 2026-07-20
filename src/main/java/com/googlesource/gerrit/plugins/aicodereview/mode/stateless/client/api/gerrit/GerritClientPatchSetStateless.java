@@ -24,6 +24,9 @@ import com.google.gerrit.extensions.common.ChangeInfo;
 import com.google.gerrit.extensions.common.FileInfo;
 import com.google.gerrit.server.account.AccountCache;
 import com.google.gerrit.server.util.ManualRequestContext;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.inject.Inject;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
 import com.googlesource.gerrit.plugins.aicodereview.interfaces.mode.common.client.api.gerrit.GerritClientPatchSetInfo;
@@ -45,30 +48,73 @@ public class GerritClientPatchSetStateless extends GerritClientPatchSet
   }
 
   public String getPatchSet(ChangeSetData changeSetData, GerritChange change) throws Exception {
+    diffs.clear();
+    fileDiffsProcessed.clear();
+    changeSetData.resetReviewTargets();
+    changeSetData.addReviewChange(change);
+
     int revisionBase = getChangeSetRevisionBase(changeSetData);
     log.debug("Revision base: {}", revisionBase);
 
     // Collect diffs for the triggering change
     List<String> files = getAffectedFiles(change, revisionBase);
+    files.forEach(filename -> changeSetData.addReviewFile(change, filename));
     log.debug("Patch files: {}", files);
-    retrieveFileDiff(change, files, revisionBase);
-    diffs.add(String.format("{\"changeId\": \"%s\"}", change.getFullChangeId()));
+    List<String> currentDiffs = retrieveChangeFileDiffs(change, files, revisionBase);
 
     // Also collect diffs for all other open changes that share the same topic
     String topic = getChangeTopic(change);
+    List<GerritChange> relatedChanges = new ArrayList<>();
     if (topic != null && !topic.isEmpty()) {
       log.debug("Topic '{}' detected, collecting related changes", topic);
-      for (GerritChange related : getTopicRelatedChanges(change, topic)) {
+      relatedChanges = getTopicRelatedChanges(change, topic);
+      for (GerritChange related : relatedChanges) {
+        changeSetData.addReviewChange(related);
         List<String> relatedFiles = getAffectedFiles(related, 0);
-        retrieveFileDiff(related, relatedFiles, 0);
-        diffs.add(String.format("{\"changeId\": \"%s\"}", related.getFullChangeId()));
+        relatedFiles.forEach(filename -> changeSetData.addReviewFile(related, filename));
+        List<String> relatedDiffs = retrieveChangeFileDiffs(related, relatedFiles, 0);
+        diffs.add(getNoEscapedChangeBlock(related, relatedDiffs));
         log.debug("Added diffs for related change: {}", related.getFullChangeId());
       }
+    }
+
+    if (relatedChanges.isEmpty()) {
+      diffs.addAll(currentDiffs);
+      diffs.add(String.format("{\"changeId\": \"%s\"}", change.getFullChangeId()));
+    } else {
+      diffs.add(0, getNoEscapedChangeBlock(change, currentDiffs));
     }
 
     String fileDiffsJson = "[" + String.join(",", diffs) + "]\n";
     log.debug("File diffs: {}", fileDiffsJson);
     return fileDiffsJson;
+  }
+
+  private List<String> retrieveChangeFileDiffs(
+      GerritChange change, List<String> files, int revisionBase) throws Exception {
+    int startIndex = diffs.size();
+    retrieveFileDiff(change, files, revisionBase);
+    List<String> changeDiffs = new ArrayList<>(diffs.subList(startIndex, diffs.size()));
+    diffs.subList(startIndex, diffs.size()).clear();
+    log.debug(
+        "Collected file diffs for change: changeId={}, files={}, diffObjects={}",
+        change.getFullChangeId(),
+        files,
+        changeDiffs.size());
+    return changeDiffs;
+  }
+
+  private String getNoEscapedChangeBlock(GerritChange change, List<String> fileDiffs) {
+    JsonObject changeBlock = new JsonObject();
+    changeBlock.addProperty("changeId", change.getFullChangeId());
+    changeBlock.addProperty("project", change.getProjectName());
+    changeBlock.addProperty("branch", change.getBranchNameKey().shortName());
+    JsonArray files = new JsonArray();
+    for (String fileDiff : fileDiffs) {
+      files.add(JsonParser.parseString(fileDiff));
+    }
+    changeBlock.add("files", files);
+    return changeBlock.toString();
   }
 
   private String getChangeTopic(GerritChange change) {

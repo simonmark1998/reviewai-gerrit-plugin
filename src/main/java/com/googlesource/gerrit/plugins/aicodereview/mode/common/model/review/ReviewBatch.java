@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 @Data
 @RequiredArgsConstructor
 public class ReviewBatch {
+  private String changeId;
   private String id;
   @NonNull private String content;
   private String filename;

@@ -14,6 +14,9 @@
               "id": {
                 "type": "integer"
               },
+              "changeId": {
+                "type": "string"
+              },
               "reply": {
                 "type": "string"
               },
@@ -43,7 +46,8 @@
               }
             },
             "required": [
-              "reply"
+              "reply",
+              "changeId"
             ]
           }
         },

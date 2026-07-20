@@ -97,7 +97,7 @@ public class GerritClientPatchSet extends GerritClientAccount {
                 .current()
                 .file(filename)
                 .diff(revisionBase);
-        processFileDiff(filename, diff);
+        processFileDiff(change, filename, diff);
       }
     }
   }
@@ -106,8 +106,9 @@ public class GerritClientPatchSet extends GerritClientAccount {
     return !changeSetData.getForcedReviewLastPatchSet();
   }
 
-  private void processFileDiff(String filename, DiffInfo diff) {
-    log.debug("FileDiff content processed: {}", filename);
+  private void processFileDiff(GerritChange change, String filename, DiffInfo diff) {
+    log.debug(
+        "FileDiff content processed: changeId={}, filename={}", change.getFullChangeId(), filename);
 
     GerritPatchSetFileDiff gerritPatchSetFileDiff = new GerritPatchSetFileDiff();
     Optional.ofNullable(diff.metaA)
@@ -126,9 +127,14 @@ public class GerritClientPatchSet extends GerritClientAccount {
             gerritPatchSetFileDiff.getMetaA(), gerritPatchSetFileDiff.getMetaB());
     FileDiffProcessed fileDiffProcessed =
         new FileDiffProcessed(config, isCommitMessage, gerritPatchSetFileDiff);
-    fileDiffsProcessed.put(filename, fileDiffProcessed);
+    fileDiffsProcessed.put(buildFileDiffKey(change.getFullChangeId(), filename), fileDiffProcessed);
+    fileDiffsProcessed.putIfAbsent(filename, fileDiffProcessed);
     gerritReviewFileDiff.setContent(fileDiffProcessed.getReviewDiffContent());
     diffs.add(getNoEscapedGson().toJson(gerritReviewFileDiff));
+  }
+
+  public static String buildFileDiffKey(String changeId, String filename) {
+    return changeId + "::" + filename;
   }
 
   protected static GerritFileDiff.Meta toMeta(DiffInfo.FileMeta input) {

@@ -20,6 +20,7 @@ import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.data.PatchSetAttribute;
 import com.google.gerrit.server.events.Event;
 import com.google.gerrit.server.events.PatchSetEvent;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -64,6 +65,7 @@ public class GerritChange {
 
   public GerritChange(String fullChangeId) {
     this.fullChangeId = fullChangeId;
+    parseFullChangeId();
   }
 
   public Optional<PatchSetAttribute> getPatchSetAttribute() {
@@ -85,5 +87,20 @@ public class GerritChange {
             URLEncoder.encode(projectNameKey.get(), StandardCharsets.UTF_8),
             branchNameKey.shortName(),
             changeKey.get());
+  }
+
+  private void parseFullChangeId() {
+    if (fullChangeId == null) {
+      return;
+    }
+    String[] parts = fullChangeId.split("~", 3);
+    if (parts.length != 3) {
+      log.debug(
+          "Cannot parse Gerrit fullChangeId '{}'; expected project~branch~changeId", fullChangeId);
+      return;
+    }
+    projectNameKey = Project.nameKey(URLDecoder.decode(parts[0], StandardCharsets.UTF_8));
+    branchNameKey = BranchNameKey.create(projectNameKey, parts[1]);
+    changeKey = Change.key(parts[2]);
   }
 }

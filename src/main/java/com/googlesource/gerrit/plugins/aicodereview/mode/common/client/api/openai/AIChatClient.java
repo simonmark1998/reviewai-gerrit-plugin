@@ -68,6 +68,8 @@ public abstract class AIChatClient extends ClientBase {
           "suggestions");
   private static final List<String> RESPONSE_TEXT_KEYS =
       Arrays.asList("response", "content", "message", "text", "output_text", "value");
+  private static final List<String> CHANGE_ID_KEYS =
+      Arrays.asList("changeId", "change_id", "targetChangeId", "target_change_id", "change");
   private static final List<String> REPLY_TEXT_KEYS =
       Arrays.asList(
           "reply",
@@ -177,11 +179,12 @@ public abstract class AIChatClient extends ClientBase {
     // provided in the request
     boolean isValidated = returnedChangeId == null || changeId.equals(returnedChangeId);
     if (!isValidated) {
-      log.error(
-          "ChangedId mismatch error (attempt #{}).\nExpected value: {}\nReturned value: {}",
+      log.warn(
+          "ChangeId mismatch in AIChat response (attempt #{}). Expected value: {}, returned value: {}. Accepting response because reply-level changeId routing may target topic-related changes.",
           attemptInd,
           changeId,
           returnedChangeId);
+      return true;
     } else {
       log.debug(
           "AIChat response validated: attempt={}, expectedChangeId={}, returnedChangeId={}",
@@ -355,21 +358,26 @@ public abstract class AIChatClient extends ClientBase {
     List<AIChatReplyItem> replies = new ArrayList<>();
     Optional<Integer> sourceScore =
         sourceObject == null ? Optional.empty() : getIntegerProperty(sourceObject, SCORE_KEYS);
+    Optional<String> sourceChangeId =
+        sourceObject == null ? Optional.empty() : getStringProperty(sourceObject, CHANGE_ID_KEYS);
     log.debug(
-        "Converting AIChat reply array: items={}, sourceScorePresent={}",
+        "Converting AIChat reply array: items={}, sourceScorePresent={}, sourceChangeId={}",
         array.size(),
-        sourceScore.isPresent());
+        sourceScore.isPresent(),
+        sourceChangeId.orElse(null));
     for (int index = 0; index < array.size(); index++) {
       JsonElement element = array.get(index);
       Optional<AIChatReplyItem> replyItem = convertReplyElement(element);
       if (replyItem.isPresent()) {
         AIChatReplyItem item = replyItem.get();
         sourceScore.ifPresent(score -> setScoreIfMissing(item, score));
+        sourceChangeId.ifPresent(changeId -> setChangeIdIfMissing(item, changeId));
         replies.add(item);
         log.debug(
-            "AIChat reply array item #{} converted: replyChars={}, filename={}, lineNumber={}, score={}",
+            "AIChat reply array item #{} converted: replyChars={}, changeId={}, filename={}, lineNumber={}, score={}",
             index,
             length(item.getReply()),
+            item.getChangeId(),
             item.getFilename(),
             item.getLineNumber(),
             item.getScore());
@@ -382,7 +390,7 @@ public abstract class AIChatClient extends ClientBase {
     }
     responseContent.setReplies(replies);
     if (sourceObject != null) {
-      getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+      getStringProperty(sourceObject, CHANGE_ID_KEYS).ifPresent(responseContent::setChangeId);
     }
     return responseContent;
   }
@@ -393,23 +401,26 @@ public abstract class AIChatClient extends ClientBase {
     List<AIChatReplyItem> replies = new ArrayList<>();
     Optional<Integer> sourceScore =
         sourceObject == null ? Optional.empty() : getIntegerProperty(sourceObject, SCORE_KEYS);
+    Optional<String> sourceChangeId =
+        sourceObject == null ? Optional.empty() : getStringProperty(sourceObject, CHANGE_ID_KEYS);
     log.debug(
-        "Converting AIChat reply object map: filenames={}, sourceScorePresent={}",
+        "Converting AIChat reply object map: filenames={}, sourceScorePresent={}, sourceChangeId={}",
         commentsByFile.keySet(),
-        sourceScore.isPresent());
+        sourceScore.isPresent(),
+        sourceChangeId.orElse(null));
     for (String filename : commentsByFile.keySet()) {
       JsonElement element = commentsByFile.get(filename);
       if (element.isJsonArray()) {
         for (JsonElement itemElement : element.getAsJsonArray()) {
-          addMappedReply(replies, itemElement, filename, sourceScore);
+          addMappedReply(replies, itemElement, filename, sourceScore, sourceChangeId);
         }
       } else {
-        addMappedReply(replies, element, filename, sourceScore);
+        addMappedReply(replies, element, filename, sourceScore, sourceChangeId);
       }
     }
     responseContent.setReplies(replies);
     if (sourceObject != null) {
-      getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+      getStringProperty(sourceObject, CHANGE_ID_KEYS).ifPresent(responseContent::setChangeId);
     }
     return responseContent;
   }
@@ -418,7 +429,8 @@ public abstract class AIChatClient extends ClientBase {
       List<AIChatReplyItem> replies,
       JsonElement element,
       String filename,
-      Optional<Integer> sourceScore) {
+      Optional<Integer> sourceScore,
+      Optional<String> sourceChangeId) {
     Optional<AIChatReplyItem> replyItem = convertReplyElement(element);
     if (replyItem.isPresent()) {
       AIChatReplyItem item = replyItem.get();
@@ -426,10 +438,12 @@ public abstract class AIChatClient extends ClientBase {
         item.setFilename(filename);
       }
       sourceScore.ifPresent(score -> setScoreIfMissing(item, score));
+      sourceChangeId.ifPresent(changeId -> setChangeIdIfMissing(item, changeId));
       replies.add(item);
       log.debug(
-          "AIChat mapped reply converted: mapKey={}, filename={}, lineNumber={}, replyChars={}, score={}",
+          "AIChat mapped reply converted: mapKey={}, changeId={}, filename={}, lineNumber={}, replyChars={}, score={}",
           filename,
+          item.getChangeId(),
           item.getFilename(),
           item.getLineNumber(),
           length(item.getReply()),
@@ -448,7 +462,7 @@ public abstract class AIChatClient extends ClientBase {
     List<AIChatReplyItem> replies = new ArrayList<>();
     replies.add(replyItem);
     responseContent.setReplies(replies);
-    getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+    getStringProperty(sourceObject, CHANGE_ID_KEYS).ifPresent(responseContent::setChangeId);
     return responseContent;
   }
 
@@ -487,6 +501,9 @@ public abstract class AIChatClient extends ClientBase {
                     length(value));
               });
     }
+    if (replyItem.getChangeId() == null) {
+      getStringProperty(object, CHANGE_ID_KEYS).ifPresent(replyItem::setChangeId);
+    }
     if (replyItem.getFilename() == null) {
       getStringProperty(object, FILENAME_KEYS).ifPresent(replyItem::setFilename);
     }
@@ -504,9 +521,10 @@ public abstract class AIChatClient extends ClientBase {
     }
     populateLocationFields(replyItem, object);
     log.debug(
-        "AIChat reply object conversion result: hasReply={}, replyChars={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}, score={}, relevance={}, repeated={}, conflicting={}",
+        "AIChat reply object conversion result: hasReply={}, replyChars={}, changeId={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}, score={}, relevance={}, repeated={}, conflicting={}",
         replyItem.getReply() != null,
         length(replyItem.getReply()),
+        replyItem.getChangeId(),
         replyItem.getFilename(),
         replyItem.getLineNumber(),
         length(replyItem.getCodeSnippet()),
@@ -526,6 +544,9 @@ public abstract class AIChatClient extends ClientBase {
       }
       JsonObject nested = object.get(key).getAsJsonObject();
       log.debug("Reading nested AIChat location object `{}` with keys: {}", key, nested.keySet());
+      if (replyItem.getChangeId() == null) {
+        getStringProperty(nested, CHANGE_ID_KEYS).ifPresent(replyItem::setChangeId);
+      }
       if (replyItem.getFilename() == null) {
         getStringProperty(nested, FILENAME_KEYS).ifPresent(replyItem::setFilename);
       }
@@ -606,6 +627,7 @@ public abstract class AIChatClient extends ClientBase {
 
   private boolean isMetadataKey(String key) {
     return matchesAnyKey(key, FILENAME_KEYS)
+        || matchesAnyKey(key, CHANGE_ID_KEYS)
         || matchesAnyKey(key, LINE_NUMBER_KEYS)
         || matchesAnyKey(key, CODE_SNIPPET_KEYS)
         || matchesAnyKey(key, CODE_TOKEN_KEYS)
@@ -641,6 +663,12 @@ public abstract class AIChatClient extends ClientBase {
   private void setScoreIfMissing(AIChatReplyItem replyItem, Integer score) {
     if (replyItem.getScore() == null) {
       replyItem.setScore(score);
+    }
+  }
+
+  private void setChangeIdIfMissing(AIChatReplyItem replyItem, String changeId) {
+    if (replyItem.getChangeId() == null) {
+      replyItem.setChangeId(changeId);
     }
   }
 

@@ -19,6 +19,7 @@ import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.s
 
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritClient;
+import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritClientPatchSet;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.patch.code.InlineCode;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.patch.diff.FileDiffProcessed;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.gerrit.GerritCodeRange;
@@ -58,15 +59,27 @@ public class GerritCommentRange {
       log.info("CodeSnippet and codeToken are both null in reply '{}'.", replyItem);
       return gerritCommentRange;
     }
-    if (!fileDiffsProcessed.containsKey(filename)) {
+    String fileDiffKey =
+        replyItem.getChangeId() == null
+            ? filename
+            : GerritClientPatchSet.buildFileDiffKey(replyItem.getChangeId(), filename);
+    FileDiffProcessed fileDiffProcessed = fileDiffsProcessed.get(fileDiffKey);
+    if (fileDiffProcessed == null && !fileDiffKey.equals(filename)) {
+      log.debug(
+          "Change-specific FileDiffProcessed not found; skipping range lookup to avoid cross-change filename ambiguity: changeId={}, filename={}",
+          replyItem.getChangeId(),
+          filename);
+    }
+    if (fileDiffProcessed == null) {
       log.info(
-          "Filename '{}' not found for reply '{}'. Available files = {}",
+          "Filename '{}' not found for reply '{}'. Looked up key '{}'. Available files = {}",
           filename,
           replyItem,
+          fileDiffKey,
           fileDiffsProcessed.keySet());
       return gerritCommentRange;
     }
-    InlineCode inlineCode = new InlineCode(fileDiffsProcessed.get(filename));
+    InlineCode inlineCode = new InlineCode(fileDiffProcessed);
     // When codeToken is provided: first find the line range via codeSnippet, then locate the
     // token within that line for a precise character-level highlight
     if (replyItem.getCodeToken() != null && !replyItem.getCodeToken().isEmpty()) {

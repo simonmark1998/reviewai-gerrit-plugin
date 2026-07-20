@@ -14,7 +14,12 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.mode.common.model.data;
 
+import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritChange;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import lombok.Data;
 import lombok.NonNull;
@@ -39,6 +44,8 @@ public class ChangeSetData {
   private Boolean hideAICodeReview = false;
   private Set<String> directives = new HashSet<>();
   private String reviewSystemMessage;
+  private Map<String, GerritChange> reviewChanges = new LinkedHashMap<>();
+  private Map<String, Set<String>> reviewFileChangeIds = new HashMap<>();
 
   public Boolean shouldHideAICodeReview() {
     return hideAICodeReview && !forcedReview;
@@ -46,5 +53,38 @@ public class ChangeSetData {
 
   public Boolean shouldRequestAICodeReview() {
     return reviewSystemMessage == null && !shouldHideAICodeReview();
+  }
+
+  public void resetReviewTargets() {
+    reviewChanges = new LinkedHashMap<>();
+    reviewFileChangeIds = new HashMap<>();
+  }
+
+  public void addReviewChange(GerritChange change) {
+    if (change != null && change.getFullChangeId() != null) {
+      reviewChanges.put(change.getFullChangeId(), change);
+    }
+  }
+
+  public void addReviewFile(GerritChange change, String filename) {
+    if (change == null || change.getFullChangeId() == null || filename == null) {
+      return;
+    }
+    addReviewChange(change);
+    reviewFileChangeIds
+        .computeIfAbsent(filename, unused -> new HashSet<>())
+        .add(change.getFullChangeId());
+  }
+
+  public Optional<GerritChange> getReviewChange(String changeId) {
+    return Optional.ofNullable(reviewChanges.get(changeId));
+  }
+
+  public Set<String> getReviewChangeIdsForFile(String filename) {
+    return reviewFileChangeIds.getOrDefault(filename, Set.of());
+  }
+
+  public boolean hasMultipleReviewChanges() {
+    return reviewChanges.size() > 1;
   }
 }

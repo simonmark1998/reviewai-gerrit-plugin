@@ -1,0 +1,11 @@
+{
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"replies\":[{\"changeId\":\"myProject~myBranchName~relatedChangeId\",\"reply\":\"Topic-related change inline comment.\",\"score\":-1,\"filename\":\"test_file.py\",\"lineNumber\":21,\"codeSnippet\":\"not an exact snippet\"}]}"
+      }
+    }
+  ]
+}
