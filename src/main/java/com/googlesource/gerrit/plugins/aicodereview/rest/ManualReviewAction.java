@@ -50,13 +50,32 @@ public class ManualReviewAction
   @Override
   public Response<String> apply(ChangeResource rsrc, Input input) throws Exception {
     Change change = rsrc.getChange();
-    log.info("Manual AI review triggered for change: {}", change.getId());
+    log.info(
+        "Manual AI review triggered for change: id={}, key={}, project={}, branch={}, trigger={}",
+        change.getId(),
+        change.getKey(),
+        change.getProject(),
+        change.getDest(),
+        input == null ? null : input.getTrigger());
 
     Configuration config = configCreator.createConfig(change.getProject(), change.getKey());
+    log.debug(
+        "Manual AI review config resolved: changeKey={}, aiType={}, aiMode={}, aiModel={}, aiDomain={}, chatEndpoint={}, votingEnabled={}, reviewPatchSet={}, streamOutput={}",
+        change.getKey(),
+        config.getAIType(),
+        config.getAIMode(),
+        config.getAIModel(),
+        config.getAIDomain(),
+        config.getChatEndpoint(),
+        config.isVotingEnabled(),
+        config.getAIReviewPatchSet(),
+        config.getAIStreamOutput());
     GerritChange gerritChange =
         new GerritChange(change.getProject(), change.getDest(), change.getKey());
+    log.debug("Manual AI review GerritChange created: {}", gerritChange);
 
     eventHandlerExecutor.executeManualReview(config, gerritChange);
+    log.debug("Manual AI review execution submitted: changeKey={}", change.getKey());
 
     return Response.ok("AI review started");
   }

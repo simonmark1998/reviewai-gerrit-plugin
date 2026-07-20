@@ -14,6 +14,9 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.data;
 
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.length;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.summarize;
+
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
 import com.googlesource.gerrit.plugins.aicodereview.localization.Localizer;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritChange;
@@ -34,6 +37,15 @@ public class ChangeSetDataHandler {
       ChangeSetData changeSetData,
       Localizer localizer) {
     GerritClientData gerritClientData = gerritClient.getClientData(change);
+    log.debug(
+        "Updating ChangeSetData: change={}, commentProperties={}, aiMode={}, aiType={}, votingEnabled={}",
+        change.getFullChangeId(),
+        gerritClientData.getCommentProperties() == null
+            ? 0
+            : gerritClientData.getCommentProperties().size(),
+        config.getAIMode(),
+        config.getAIType(),
+        config.isVotingEnabled());
     AIChatDataPrompt AIChatDataPrompt =
         new AIChatDataPrompt(config, changeSetData, change, gerritClientData, localizer);
 
@@ -41,9 +53,19 @@ public class ChangeSetDataHandler {
     changeSetData.setDirectives(new HashSet<>());
     changeSetData.setReviewSystemMessage(null);
     changeSetData.setReviewAIDataPrompt(AIChatDataPrompt.buildPrompt());
+    log.debug(
+        "ChangeSetData prompt built: change={}, commentPropertiesSize={}, promptChars={}, prompt={}",
+        change.getFullChangeId(),
+        changeSetData.getCommentPropertiesSize(),
+        length(changeSetData.getReviewAIDataPrompt()),
+        summarize(changeSetData.getReviewAIDataPrompt()));
     if (config.isVotingEnabled() && !change.getIsCommentEvent()) {
       GerritPermittedVotingRange permittedVotingRange =
           gerritClient.getPermittedVotingRange(change);
+      log.debug(
+          "Permitted Gerrit voting range retrieved: change={}, range={}",
+          change.getFullChangeId(),
+          permittedVotingRange);
       if (permittedVotingRange != null) {
         if (permittedVotingRange.getMin() > config.getVotingMinScore()) {
           log.debug("Minimum AIChat voting score set to {}", permittedVotingRange.getMin());
@@ -54,6 +76,11 @@ public class ChangeSetDataHandler {
           changeSetData.setVotingMaxScore(permittedVotingRange.getMax());
         }
       }
+    } else {
+      log.debug(
+          "Skipping permitted voting range lookup: votingEnabled={}, isCommentEvent={}",
+          config.isVotingEnabled(),
+          change.getIsCommentEvent());
     }
   }
 }

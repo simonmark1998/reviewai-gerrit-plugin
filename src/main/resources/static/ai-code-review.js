@@ -9,25 +9,40 @@ Gerrit.install(plugin => {
   let actionRegistered = false;
   let fallbackRegistered = false;
 
+  debug("plugin loaded");
+
   plugin.on("showchange", change => {
+    debug("showchange event", {
+      changeNumber: change && change._number,
+      project: change && change.project,
+      branch: change && change.branch,
+    });
     currentChange = change;
     registerChangeAction();
   });
 
   function registerChangeAction() {
+    debug("registerChangeAction called", {actionRegistered});
     if (actionRegistered) {
       return;
     }
 
     const actions =
       typeof plugin.changeActions === "function" ? plugin.changeActions() : null;
+    debug("changeActions resolved", {
+      hasChangeActionsFunction: typeof plugin.changeActions === "function",
+      hasActionsObject: !!actions,
+      hasAddFunction: !!actions && typeof actions.add === "function",
+    });
     if (!actions || typeof actions.add !== "function") {
+      debug("changeActions unavailable; registering fallback button");
       registerFallbackButton();
       return;
     }
 
     try {
       actionKey = actions.add(CHANGE_ACTION_TYPE, LABEL);
+      debug("change action add returned", {actionKey});
       if (!actionKey) {
         throw new Error("changeActions.add did not return an action key");
       }
@@ -35,6 +50,7 @@ Gerrit.install(plugin => {
 
       safeCall(actions, "setTitle", actionKey, "Trigger an AI code review for this change.");
       safeCall(actions, "addTapListener", actionKey, event => {
+        debug("change action tapped", {actionKey});
         if (event) {
           if (typeof event.preventDefault === "function") {
             event.preventDefault();
@@ -47,17 +63,28 @@ Gerrit.install(plugin => {
       });
     } catch (error) {
       console.warn("AI review change action could not be registered", error);
+      debug("falling back after change action registration error", {
+        error: error && (error.message || String(error)),
+      });
       registerFallbackButton();
     }
   }
 
   function registerFallbackButton() {
+    debug("registerFallbackButton called", {
+      fallbackRegistered,
+      hasHookFunction: typeof plugin.hook === "function",
+    });
     if (fallbackRegistered || typeof plugin.hook !== "function") {
       return;
     }
     fallbackRegistered = true;
 
     plugin.hook("change-view-integration").onAttached(hookEl => {
+      debug("change-view-integration attached", {
+        hasHookEl: !!hookEl,
+        hasExistingButton: !!hookEl && !!hookEl.querySelector(FALLBACK_BUTTON_SELECTOR),
+      });
       if (!hookEl || hookEl.querySelector(FALLBACK_BUTTON_SELECTOR)) {
         return;
       }
@@ -79,15 +106,18 @@ Gerrit.install(plugin => {
         "cursor:pointer",
       ].join(";");
       button.addEventListener("click", () => {
+        debug("fallback button clicked");
         triggerReview(working => setFallbackWorking(button, working));
       });
 
       hookEl.appendChild(button);
+      debug("fallback button appended");
     });
   }
 
   async function triggerReview(setWorking) {
     const changeNumber = getChangeNumber();
+    debug("triggerReview called", {changeNumber});
     if (!changeNumber) {
       notify("AI review could not determine the current change.");
       return;
@@ -95,9 +125,12 @@ Gerrit.install(plugin => {
 
     setWorking(true);
     try {
-      await plugin.restApi().post(`/changes/${encodeURIComponent(changeNumber)}/ai-review`, {
+      const endpoint = `/changes/${encodeURIComponent(changeNumber)}/ai-review`;
+      debug("posting manual AI review request", {endpoint});
+      const response = await plugin.restApi().post(endpoint, {
         trigger: "manual",
       });
+      debug("manual AI review request completed", {response});
       notify("AI review started.");
     } catch (error) {
       console.error("AI review failed", error);
@@ -109,20 +142,29 @@ Gerrit.install(plugin => {
 
   function getChangeNumber() {
     if (currentChange && currentChange._number) {
+      debug("change number resolved from showchange payload", {
+        changeNumber: currentChange._number,
+      });
       return currentChange._number;
     }
 
     const locationText = `${window.location.pathname}${window.location.hash}`;
     const match = locationText.match(/\/c\/.*\/\+\/(\d+)/);
+    debug("change number resolved from location fallback", {
+      locationText,
+      changeNumber: match ? match[1] : null,
+    });
     return match ? match[1] : null;
   }
 
   function setActionWorking(actions, key, working) {
+    debug("setActionWorking", {key, working});
     safeCall(actions, "setEnabled", key, !working);
     safeCall(actions, "setLabel", key, working ? WORKING_LABEL : LABEL);
   }
 
   function setFallbackWorking(button, working) {
+    debug("setFallbackWorking", {working});
     button.disabled = working;
     button.textContent = working ? WORKING_LABEL : LABEL;
     button.style.cursor = working ? "wait" : "pointer";
@@ -130,16 +172,28 @@ Gerrit.install(plugin => {
 
   function safeCall(object, method, ...args) {
     if (object && typeof object[method] === "function") {
+      debug("calling Gerrit plugin API method", {method});
       object[method](...args);
+    } else {
+      debug("skipping unavailable Gerrit plugin API method", {method});
     }
   }
 
   function notify(message) {
+    debug("showing notification", {message});
     document.dispatchEvent(
         new CustomEvent("show-alert", {
           detail: {message},
           composed: true,
           bubbles: true,
         }));
+  }
+
+  function debug(message, data) {
+    if (data === undefined) {
+      console.debug(`[ai-code-review] ${message}`);
+    } else {
+      console.debug(`[ai-code-review] ${message}`, data);
+    }
   }
 });

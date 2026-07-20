@@ -97,14 +97,36 @@ public class EventHandlerTask implements Runnable {
 
   @VisibleForTesting
   public Result execute() {
+    log.debug(
+        "AI event task execution started: change={}, project={}, branch={}, eventType={}, forcedReview={}",
+        change.getFullChangeId(),
+        change.getProjectNameKey(),
+        change.getBranchNameKey(),
+        change.getEventType(),
+        changeSetData.getForcedReview());
     if (!preProcessEvent()) {
+      log.debug(
+          "AI event task preprocessing rejected change: change={}, eventType={}, forcedReview={}",
+          change.getFullChangeId(),
+          change.getEventType(),
+          changeSetData.getForcedReview());
       return Result.NOT_SUPPORTED;
     }
 
     try {
       log.info("Processing change: {}", change.getFullChangeId());
+      log.debug(
+          "AI event handler processing started: change={}, processingEventType={}, handler={}",
+          change.getFullChangeId(),
+          processing_event_type,
+          eventHandlerType.getClass().getSimpleName());
       eventHandlerType.processEvent();
       log.info("Finished processing change: {}", change.getFullChangeId());
+      log.debug(
+          "AI event handler processing completed: change={}, processingEventType={}, handler={}",
+          change.getFullChangeId(),
+          processing_event_type,
+          eventHandlerType.getClass().getSimpleName());
     } catch (Exception e) {
       log.error("Error while processing change: {}", change.getFullChangeId(), e);
       if (e instanceof InterruptedException) {
@@ -119,27 +141,45 @@ public class EventHandlerTask implements Runnable {
     String eventType = Optional.ofNullable(change.getEventType()).orElse("");
     log.info("Event type {}", eventType);
     processing_event_type = EVENT_TYPE_MAP.get(eventType);
+    log.debug(
+        "AI event type mapped: rawEventType={}, mappedEventType={}, forcedReview={}",
+        eventType,
+        processing_event_type,
+        changeSetData.getForcedReview());
     if (processing_event_type == null) {
       if (changeSetData.getForcedReview()) {
         // Manual review triggered (no event) — treat as patch-set-created
         log.info("No event type found but forcedReview=true, using PATCH_SET_CREATED");
         processing_event_type = SupportedEvents.PATCH_SET_CREATED;
       } else {
+        log.debug("AI event rejected: unsupported event type and forcedReview=false");
         return false;
       }
     }
 
     if (!isReviewEnabled(change)) {
+      log.debug("AI event rejected: review is not enabled for change {}", change.getFullChangeId());
       return false;
     }
 
     while (true) {
       eventHandlerType = getEventHandlerType();
+      log.debug(
+          "AI event handler selected for preprocessing: eventType={}, handler={}",
+          processing_event_type,
+          eventHandlerType.getClass().getSimpleName());
       switch (eventHandlerType.preprocessEvent()) {
         case EXIT -> {
+          log.debug(
+              "AI event handler preprocessing requested EXIT: eventType={}, handler={}",
+              processing_event_type,
+              eventHandlerType.getClass().getSimpleName());
           return false;
         }
         case SWITCH_TO_PATCH_SET_CREATED -> {
+          log.debug(
+              "AI event handler preprocessing requested switch to PATCH_SET_CREATED: handler={}",
+              eventHandlerType.getClass().getSimpleName());
           processing_event_type = SupportedEvents.PATCH_SET_CREATED;
           continue;
         }
@@ -165,6 +205,13 @@ public class EventHandlerTask implements Runnable {
   private boolean isReviewEnabled(GerritChange change) {
     List<String> enabledProjects =
         Splitter.on(",").omitEmptyStrings().splitToList(config.getEnabledProjects());
+    log.debug(
+        "AI review enablement check: change={}, globalEnable={}, projectEnable={}, enabledProjects={}, project={}",
+        change.getFullChangeId(),
+        config.isGlobalEnable(),
+        config.isProjectEnable(),
+        enabledProjects,
+        change.getProjectNameKey().get());
     if (!config.isGlobalEnable()
         && !enabledProjects.contains(change.getProjectNameKey().get())
         && !config.isProjectEnable()) {
@@ -179,6 +226,7 @@ public class EventHandlerTask implements Runnable {
       return false;
     }
 
+    log.debug("AI review enablement check passed: change={}", change.getFullChangeId());
     return true;
   }
 

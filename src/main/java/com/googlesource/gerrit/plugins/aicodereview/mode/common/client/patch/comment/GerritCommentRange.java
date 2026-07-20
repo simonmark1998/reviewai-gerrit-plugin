@@ -14,6 +14,9 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.mode.common.client.patch.comment;
 
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.length;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.summarize;
+
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.patch.code.InlineCode;
@@ -30,12 +33,25 @@ public class GerritCommentRange {
 
   public GerritCommentRange(GerritClient gerritClient, GerritChange change) {
     fileDiffsProcessed = gerritClient.getFileDiffsProcessed(change);
+    log.debug(
+        "GerritCommentRange initialized: change={}, files={}",
+        change.getFullChangeId(),
+        fileDiffsProcessed == null ? null : fileDiffsProcessed.keySet());
   }
 
   public Optional<GerritCodeRange> getGerritCommentRange(AIChatReplyItem replyItem) {
     Optional<GerritCodeRange> gerritCommentRange = Optional.empty();
     String filename = replyItem.getFilename();
+    log.debug(
+        "Resolving Gerrit inline range for AI reply: filename={}, lineNumber={}, codeSnippetChars={}, codeSnippet={}, codeToken={}",
+        filename,
+        replyItem.getLineNumber(),
+        length(replyItem.getCodeSnippet()),
+        summarize(replyItem.getCodeSnippet()),
+        replyItem.getCodeToken());
     if (filename == null || filename.equals("/COMMIT_MSG")) {
+      log.debug(
+          "Skipping inline range lookup because filename is null or commit message: {}", filename);
       return gerritCommentRange;
     }
     if (replyItem.getCodeSnippet() == null && replyItem.getCodeToken() == null) {
@@ -44,31 +60,47 @@ public class GerritCommentRange {
     }
     if (!fileDiffsProcessed.containsKey(filename)) {
       log.info(
-          "Filename '{}' not found for reply '{}'.\nFileDiffsProcessed = {}",
+          "Filename '{}' not found for reply '{}'. Available files = {}",
           filename,
           replyItem,
-          fileDiffsProcessed);
+          fileDiffsProcessed.keySet());
       return gerritCommentRange;
     }
     InlineCode inlineCode = new InlineCode(fileDiffsProcessed.get(filename));
     // When codeToken is provided: first find the line range via codeSnippet, then locate the
     // token within that line for a precise character-level highlight
     if (replyItem.getCodeToken() != null && !replyItem.getCodeToken().isEmpty()) {
+      log.debug("Attempting token-level inline range lookup: token={}", replyItem.getCodeToken());
       Optional<GerritCodeRange> snippetRange =
           replyItem.getCodeSnippet() != null
               ? inlineCode.findCommentRange(replyItem)
               : Optional.empty();
+      log.debug(
+          "Snippet range before token lookup: present={}, range={}",
+          snippetRange.isPresent(),
+          snippetRange.orElse(null));
       gerritCommentRange =
           snippetRange.isPresent()
               ? inlineCode.findTokenInLine(replyItem.getCodeToken(), snippetRange.get())
               : Optional.empty();
+      log.debug(
+          "Token-level inline range lookup result: present={}, range={}",
+          gerritCommentRange.isPresent(),
+          gerritCommentRange.orElse(null));
     }
     // Fall back to codeSnippet-based range if codeToken range was not found
     if (gerritCommentRange.isEmpty() && replyItem.getCodeSnippet() != null) {
+      log.debug("Attempting snippet-level inline range lookup after token lookup miss");
       gerritCommentRange = inlineCode.findCommentRange(replyItem);
+      log.debug(
+          "Snippet-level inline range lookup result: present={}, range={}",
+          gerritCommentRange.isPresent(),
+          gerritCommentRange.orElse(null));
     }
     if (gerritCommentRange.isEmpty()) {
       log.info("Inline code not found for reply {}", replyItem);
+    } else {
+      log.debug("Inline Gerrit range resolved: {}", gerritCommentRange.get());
     }
     return gerritCommentRange;
   }

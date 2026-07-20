@@ -50,17 +50,25 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
 
   @Override
   public PreprocessResult preprocessEvent() {
+    log.debug(
+        "PatchSet review preprocessing started: change={}, forcedReview={}, aiReviewPatchSet={}",
+        change.getFullChangeId(),
+        changeSetData.getForcedReview(),
+        config.getAIReviewPatchSet());
     if (!isPatchSetReviewEnabled(change)) {
       log.debug("Patch Set review disabled");
       return PreprocessResult.EXIT;
     }
     gerritClient.retrievePatchSetInfo(change);
+    log.debug("PatchSet review preprocessing completed: change={}", change.getFullChangeId());
 
     return PreprocessResult.OK;
   }
 
   @Override
   public void processEvent() throws Exception {
+    log.debug(
+        "PatchSet review processing delegated to reviewer: change={}", change.getFullChangeId());
     reviewer.review(change);
   }
 
@@ -71,6 +79,11 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
     }
 
     Optional<PatchSetAttribute> patchSetAttributeOptional = change.getPatchSetAttribute();
+    log.debug(
+        "PatchSetAttribute lookup: change={}, present={}, forcedReview={}",
+        change.getFullChangeId(),
+        patchSetAttributeOptional.isPresent(),
+        changeSetData.getForcedReview());
 
     if (patchSetAttributeOptional.isEmpty()) {
       if (changeSetData.getForcedReview()) {
@@ -84,6 +97,12 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
 
     PatchSetAttribute patchSetAttribute = patchSetAttributeOptional.get();
     ChangeKind patchSetEventKind = patchSetAttribute.kind;
+    log.debug(
+        "PatchSetAttribute retrieved: change={}, kind={}, author={}, forcedReview={}",
+        change.getFullChangeId(),
+        patchSetEventKind,
+        patchSetAttribute.author == null ? null : patchSetAttribute.author.username,
+        changeSetData.getForcedReview());
     // The only Change kind that automatically triggers the review is REWORK. If review is forced
     // via command, this
     // condition is bypassed
@@ -100,6 +119,7 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
       log.debug("Skipping Patch Set processing due to its WIP status.");
       return false;
     }
+    log.debug("PatchSet review enabled for change={}", change.getFullChangeId());
     return true;
   }
 }

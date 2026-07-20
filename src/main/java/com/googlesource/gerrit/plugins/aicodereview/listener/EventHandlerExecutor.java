@@ -46,21 +46,43 @@ public class EventHandlerExecutor {
   }
 
   public void execute(Configuration config, Event event) {
+    log.debug(
+        "Submitting Gerrit event to AI review executor: eventType={}, eventClass={}, aiType={}, aiMode={}",
+        event == null ? null : event.getType(),
+        event == null ? null : event.getClass().getName(),
+        config.getAIType(),
+        config.getAIMode());
     GerritEventContextModule contextModule = new GerritEventContextModule(config, event);
     EventHandlerTask task =
         injector.createChildInjector(contextModule).getInstance(EventHandlerTask.class);
+    log.debug("Gerrit event AI review task created; enqueueing async execution");
     executor.execute(task);
   }
 
   public void executeManualReview(Configuration config, GerritChange gerritChange) {
     log.info("Manual AI review execution requested for change: {}", gerritChange);
-    log.debug("Manual AI review config: {}", config);
+    log.debug(
+        "Manual AI review safe config summary: aiType={}, aiMode={}, aiModel={}, aiDomain={}, chatEndpoint={}, votingEnabled={}, reviewPatchSet={}, streamOutput={}",
+        config.getAIType(),
+        config.getAIMode(),
+        config.getAIModel(),
+        config.getAIDomain(),
+        config.getChatEndpoint(),
+        config.isVotingEnabled(),
+        config.getAIReviewPatchSet(),
+        config.getAIStreamOutput());
     GerritEventContextModule contextModule = new GerritEventContextModule(config, gerritChange);
     Injector childInjector = injector.createChildInjector(contextModule);
     EventHandlerTask task = childInjector.getInstance(EventHandlerTask.class);
     ChangeSetData changeSetData = childInjector.getInstance(ChangeSetData.class);
     changeSetData.setForcedReview(true);
     changeSetData.setReplyFilterEnabled(false);
+    log.debug(
+        "Manual AI review ChangeSetData prepared: forcedReview={}, replyFilterEnabled={}, debugReviewMode={}",
+        changeSetData.getForcedReview(),
+        changeSetData.getReplyFilterEnabled(),
+        changeSetData.getDebugReviewMode());
+    log.debug("Manual AI review task created; enqueueing async execution");
     executor.execute(task);
   }
 }

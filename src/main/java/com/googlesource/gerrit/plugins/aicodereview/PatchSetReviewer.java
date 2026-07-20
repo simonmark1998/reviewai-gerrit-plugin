@@ -14,6 +14,8 @@
 
 package com.googlesource.gerrit.plugins.aicodereview;
 
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.length;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.DebugLogUtils.summarize;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.isJsonString;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.unwrapJsonCode;
 
@@ -84,29 +86,74 @@ public class PatchSetReviewer {
   }
 
   public void review(GerritChange change) throws Exception {
+    log.debug(
+        "AI review pipeline started: change={}, project={}, branch={}, isCommentEvent={}, forcedReview={}",
+        change.getFullChangeId(),
+        change.getProjectNameKey(),
+        change.getBranchNameKey(),
+        change.getIsCommentEvent(),
+        changeSetData.getForcedReview());
     reviewBatches = new ArrayList<>();
     reviewScores = new ArrayList<>();
     commentProperties = gerritClient.getClientData(change).getCommentProperties();
     gerritCommentRange = new GerritCommentRange(gerritClient, change);
     String patchSet = gerritClient.getPatchSet(change);
+    log.debug(
+        "PatchSet retrieved for AI review: change={}, chars={}, lines={}, commentProperties={}",
+        change.getFullChangeId(),
+        length(patchSet),
+        Arrays.asList(patchSet.split("\n")).size(),
+        commentProperties == null ? 0 : commentProperties.size());
     if (patchSet.isEmpty() && config.getAIMode() == Settings.Modes.stateless) {
       log.info("No file to review has been found in the PatchSet");
       return;
     }
     ChangeSetDataHandler.update(config, change, gerritClient, changeSetData, localizer);
+    log.debug(
+        "ChangeSetData after update: change={}, shouldRequest={}, shouldHide={}, forcedReview={}, replyFilterEnabled={}, debugReviewMode={}, directives={}, reviewSystemMessagePresent={}, aiPromptChars={}",
+        change.getFullChangeId(),
+        changeSetData.shouldRequestAICodeReview(),
+        changeSetData.shouldHideAICodeReview(),
+        changeSetData.getForcedReview(),
+        changeSetData.getReplyFilterEnabled(),
+        changeSetData.getDebugReviewMode(),
+        changeSetData.getDirectives().size(),
+        changeSetData.getReviewSystemMessage() != null,
+        length(changeSetData.getReviewAIDataPrompt()));
 
     if (changeSetData.shouldRequestAICodeReview()) {
       AIChatResponseContent reviewReply = getReviewReply(change, patchSet);
-      log.debug("AIChat response: {}", reviewReply);
+      log.debug(
+          "AIChat parsed response received: change={}, replies={}, messageContentChars={}, changeId={}",
+          change.getFullChangeId(),
+          reviewReply.getReplies() == null ? null : reviewReply.getReplies().size(),
+          length(reviewReply.getMessageContent()),
+          reviewReply.getChangeId());
+      log.debug("AIChat parsed response detail: {}", reviewReply);
 
       retrieveReviewBatches(reviewReply, change);
+    } else {
+      log.debug(
+          "AI review request skipped by ChangeSetData: change={}, systemMessage={}, hidden={}",
+          change.getFullChangeId(),
+          summarize(changeSetData.getReviewSystemMessage()),
+          changeSetData.shouldHideAICodeReview());
     }
-    clientReviewProvider
-        .get()
-        .setReview(change, reviewBatches, changeSetData, getReviewScore(change));
+    Integer reviewScore = getReviewScore(change);
+    log.debug(
+        "Submitting Gerrit review from pipeline: change={}, reviewBatches={}, reviewScores={}, finalReviewScore={}",
+        change.getFullChangeId(),
+        reviewBatches.size(),
+        reviewScores,
+        reviewScore);
+    clientReviewProvider.get().setReview(change, reviewBatches, changeSetData, reviewScore);
   }
 
   private void setCommentBatchMap(ReviewBatch batchMap, Integer batchID) {
+    log.debug(
+        "Mapping AI reply to existing Gerrit comment: requestedBatchId={}, commentProperties={}",
+        batchID,
+        commentProperties == null ? 0 : commentProperties.size());
     if (commentProperties != null && batchID < commentProperties.size()) {
       GerritComment commentProperty = commentProperties.get(batchID);
       if (commentProperty != null
@@ -120,12 +167,34 @@ public class PatchSetReviewer {
           batchMap.setFilename(filename);
           batchMap.setLine(line);
           batchMap.setRange(range);
+          log.debug(
+              "Mapped AI reply to existing Gerrit comment: id={}, filename={}, line={}, range={}",
+              id,
+              filename,
+              line,
+              range);
         }
+      } else {
+        log.debug(
+            "Existing Gerrit comment had no line/range, cannot map inline reply: batchID={}, comment={}",
+            batchID,
+            commentProperty);
       }
+    } else {
+      log.debug(
+          "Existing Gerrit comment index not available: requestedBatchId={}, commentProperties={}",
+          batchID,
+          commentProperties == null ? 0 : commentProperties.size());
     }
   }
 
   private void setPatchSetReviewBatchMap(ReviewBatch batchMap, AIChatReplyItem replyItem) {
+    log.debug(
+        "Resolving AI reply location: filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
+        replyItem.getFilename(),
+        replyItem.getLineNumber(),
+        length(replyItem.getCodeSnippet()),
+        replyItem.getCodeToken());
     Optional<GerritCodeRange> optGerritCommentRange =
         gerritCommentRange.getGerritCommentRange(replyItem);
     if (optGerritCommentRange.isPresent()) {
@@ -133,16 +202,37 @@ public class PatchSetReviewer {
       batchMap.setFilename(replyItem.getFilename());
       batchMap.setLine(gerritCodeRange.getStartLine());
       batchMap.setRange(gerritCodeRange);
+      log.debug(
+          "AI reply mapped to precise Gerrit range: filename={}, line={}, range={}",
+          batchMap.getFilename(),
+          batchMap.getLine(),
+          batchMap.getRange());
     } else if (replyItem.getFilename() != null && replyItem.getLineNumber() != null) {
       batchMap.setFilename(replyItem.getFilename());
       batchMap.setLine(replyItem.getLineNumber());
+      log.debug(
+          "AI reply mapped to Gerrit line fallback: filename={}, line={}",
+          batchMap.getFilename(),
+          batchMap.getLine());
+    } else {
+      log.debug(
+          "AI reply has no inline location; will become patchset-level comment: filename={}, lineNumber={}",
+          replyItem.getFilename(),
+          replyItem.getLineNumber());
     }
   }
 
   private void retrieveReviewBatches(AIChatResponseContent reviewReply, GerritChange change) {
+    log.debug(
+        "Building review batches from AI response: replies={}, messageContentChars={}",
+        reviewReply.getReplies() == null ? null : reviewReply.getReplies().size(),
+        length(reviewReply.getMessageContent()));
     if ((reviewReply.getReplies() == null || reviewReply.getReplies().isEmpty())
         && reviewReply.getMessageContent() != null
         && !reviewReply.getMessageContent().isEmpty()) {
+      log.debug(
+          "AI response has messageContent but no replies; adding patchset-level batch: {}",
+          summarize(reviewReply.getMessageContent()));
       reviewBatches.add(new ReviewBatch(reviewReply.getMessageContent()));
       return;
     }
@@ -151,8 +241,21 @@ public class PatchSetReviewer {
       return;
     }
     List<ReviewBatch> hiddenReviewBatches = new ArrayList<>();
-    for (AIChatReplyItem replyItem : reviewReply.getReplies()) {
+    for (int replyIndex = 0; replyIndex < reviewReply.getReplies().size(); replyIndex++) {
+      AIChatReplyItem replyItem = reviewReply.getReplies().get(replyIndex);
       String reply = getReplyText(replyItem);
+      log.debug(
+          "Processing AI reply item #{}: replyChars={}, score={}, relevance={}, repeated={}, conflicting={}, filename={}, lineNumber={}, codeSnippetChars={}, codeToken={}",
+          replyIndex,
+          length(reply),
+          replyItem.getScore(),
+          replyItem.getRelevance(),
+          replyItem.isRepeated(),
+          replyItem.isConflicting(),
+          replyItem.getFilename(),
+          replyItem.getLineNumber(),
+          length(replyItem.getCodeSnippet()),
+          replyItem.getCodeToken());
       if (reply.isBlank()) {
         log.warn("AIChat reply text is empty for reply item {}", replyItem);
         continue;
@@ -162,6 +265,17 @@ public class PatchSetReviewer {
       boolean isIrrelevant = isIrrelevantReply(replyItem);
       boolean isHidden =
           replyItem.isRepeated() || replyItem.isConflicting() || isIrrelevant || isNotNegative;
+      log.debug(
+          "AI reply filter decision #{}: isHidden={}, isNotNegative={}, isIrrelevant={}, replyFilterEnabled={}, filterNegativeComments={}, filterBelowScore={}, filterRelevantComments={}, relevanceThreshold={}",
+          replyIndex,
+          isHidden,
+          isNotNegative,
+          isIrrelevant,
+          changeSetData.getReplyFilterEnabled(),
+          config.getFilterNegativeComments(),
+          config.getFilterCommentsBelowScore(),
+          config.getFilterRelevantComments(),
+          config.getFilterCommentsRelevanceThreshold());
       if (!replyItem.isConflicting() && !isIrrelevant && score != null) {
         log.debug("Score added: {}", score);
         reviewScores.add(score);
@@ -176,15 +290,33 @@ public class PatchSetReviewer {
         setPatchSetReviewBatchMap(batchMap, replyItem);
       }
       if (changeSetData.getReplyFilterEnabled() && isHidden) {
+        log.debug(
+            "AI reply item #{} hidden by filter but kept for all-hidden fallback: filename={}, line={}, range={}",
+            replyIndex,
+            batchMap.getFilename(),
+            batchMap.getLine(),
+            batchMap.getRange());
         hiddenReviewBatches.add(batchMap);
         continue;
       }
+      log.debug(
+          "AI reply item #{} added to review batches: filename={}, line={}, range={}, message={}",
+          replyIndex,
+          batchMap.getFilename(),
+          batchMap.getLine(),
+          batchMap.getRange(),
+          summarize(batchMap.getContent()));
       reviewBatches.add(batchMap);
     }
     if (reviewBatches.isEmpty() && !hiddenReviewBatches.isEmpty()) {
       log.warn("AIChat reply filter hid every reply; submitting filtered replies as fallback");
       reviewBatches.addAll(hiddenReviewBatches);
     }
+    log.debug(
+        "Review batch build complete: submittedBatches={}, hiddenFallbackCandidates={}, reviewScores={}",
+        reviewBatches.size(),
+        hiddenReviewBatches.size(),
+        reviewScores);
   }
 
   private String getReplyText(AIChatReplyItem replyItem) {
@@ -196,11 +328,13 @@ public class PatchSetReviewer {
     if (!isJsonString(trimmed)) {
       return reply;
     }
+    log.debug("AI reply text itself looks like JSON; attempting to unwrap reply field");
     try {
       JsonElement parsed = JsonParser.parseString(unwrapJsonCode(trimmed));
       if (parsed.isJsonObject()) {
         JsonObject object = parsed.getAsJsonObject();
         if (object.has("reply") && object.get("reply").isJsonPrimitive()) {
+          log.debug("AI reply JSON unwrapped through `reply` field");
           return object.get("reply").getAsString();
         }
       }
@@ -213,20 +347,36 @@ public class PatchSetReviewer {
   private AIChatResponseContent getReviewReply(GerritChange change, String patchSet)
       throws Exception {
     List<String> patchLines = Arrays.asList(patchSet.split("\n"));
+    log.debug(
+        "Preparing AI review request: change={}, patchLines={}, maxReviewLines={}, patchChars={}",
+        change.getFullChangeId(),
+        patchLines.size(),
+        config.getMaxReviewLines(),
+        length(patchSet));
     if (patchLines.size() > config.getMaxReviewLines()) {
       log.warn("Patch set too large. Skipping review. changeId: {}", change.getFullChangeId());
       return new AIChatResponseContent(String.format(SPLIT_REVIEW_MSG, config.getMaxReviewLines()));
     }
 
+    log.debug("Sending patchset to AI client: change={}", change.getFullChangeId());
     return chatAIClient.ask(changeSetData, change, patchSet);
   }
 
   private Integer getReviewScore(GerritChange change) {
     if (config.isVotingEnabled()) {
-      return reviewScores.isEmpty()
-          ? (change.getIsCommentEvent() || reviewBatches.isEmpty() ? null : 0)
-          : Collections.min(reviewScores);
+      Integer score =
+          reviewScores.isEmpty()
+              ? (change.getIsCommentEvent() || reviewBatches.isEmpty() ? null : 0)
+              : Collections.min(reviewScores);
+      log.debug(
+          "Computed Gerrit review score: change={}, votingEnabled=true, collectedScores={}, reviewBatches={}, score={}",
+          change.getFullChangeId(),
+          reviewScores,
+          reviewBatches.size(),
+          score);
+      return score;
     } else {
+      log.debug("Gerrit voting disabled; no Code-Review label will be sent");
       return null;
     }
   }
