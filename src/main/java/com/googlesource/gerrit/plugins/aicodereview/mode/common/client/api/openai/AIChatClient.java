@@ -77,12 +77,34 @@ public abstract class AIChatClient extends ClientBase {
           "feedback",
           "description",
           "suggestion",
+          "review",
+          "finding",
+          "issue",
+          "problem",
+          "reason",
+          "rationale",
+          "details",
+          "summary",
+          "title",
+          "commentText",
+          "comment_text",
+          "reviewText",
+          "review_text",
           "reviewComment",
           "review_comment");
   private static final List<String> FILENAME_KEYS =
       Arrays.asList("filename", "file", "fileName", "file_name", "filePath", "file_path", "path");
   private static final List<String> LINE_NUMBER_KEYS =
-      Arrays.asList("lineNumber", "line", "line_number", "lineNo", "line_no");
+      Arrays.asList(
+          "lineNumber",
+          "line",
+          "line_number",
+          "lineNo",
+          "line_no",
+          "startLine",
+          "start_line",
+          "endLine",
+          "end_line");
   private static final List<String> CODE_SNIPPET_KEYS =
       Arrays.asList("codeSnippet", "snippet", "code", "code_snippet", "excerpt");
   private static final List<String> CODE_TOKEN_KEYS =
@@ -346,6 +368,9 @@ public abstract class AIChatClient extends ClientBase {
     if (replyItem.getReply() == null) {
       getStringProperty(object, REPLY_TEXT_KEYS).ifPresent(replyItem::setReply);
     }
+    if (replyItem.getReply() == null) {
+      getFallbackReplyText(object).ifPresent(replyItem::setReply);
+    }
     if (replyItem.getFilename() == null) {
       getStringProperty(object, FILENAME_KEYS).ifPresent(replyItem::setFilename);
     }
@@ -361,7 +386,108 @@ public abstract class AIChatClient extends ClientBase {
     if (replyItem.getScore() == null) {
       getIntegerProperty(object, SCORE_KEYS).ifPresent(replyItem::setScore);
     }
+    populateLocationFields(replyItem, object);
     return replyItem.getReply() == null ? Optional.empty() : Optional.of(replyItem);
+  }
+
+  private void populateLocationFields(AIChatReplyItem replyItem, JsonObject object) {
+    for (String key :
+        Arrays.asList("location", "position", "range", "commentRange", "comment_range")) {
+      if (!object.has(key) || !object.get(key).isJsonObject()) {
+        continue;
+      }
+      JsonObject nested = object.get(key).getAsJsonObject();
+      if (replyItem.getFilename() == null) {
+        getStringProperty(nested, FILENAME_KEYS).ifPresent(replyItem::setFilename);
+      }
+      if (replyItem.getLineNumber() == null) {
+        getIntegerProperty(nested, LINE_NUMBER_KEYS).ifPresent(replyItem::setLineNumber);
+      }
+      if (replyItem.getCodeSnippet() == null) {
+        getStringProperty(nested, CODE_SNIPPET_KEYS).ifPresent(replyItem::setCodeSnippet);
+      }
+      if (replyItem.getCodeToken() == null) {
+        getStringProperty(nested, CODE_TOKEN_KEYS).ifPresent(replyItem::setCodeToken);
+      }
+    }
+  }
+
+  private Optional<String> getFallbackReplyText(JsonObject object) {
+    Optional<String> preferred = Optional.empty();
+    Optional<String> longest = Optional.empty();
+    for (String key : object.keySet()) {
+      JsonElement element = object.get(key);
+      Optional<String> value = getFallbackStringValue(element);
+      if (value.isEmpty() || isMetadataKey(key)) {
+        continue;
+      }
+      String text = value.get().trim();
+      if (text.isEmpty() || isJsonString(text)) {
+        continue;
+      }
+      if (looksLikeReplyTextKey(key)) {
+        preferred = chooseLonger(preferred, text);
+      }
+      longest = chooseLonger(longest, text);
+    }
+    return preferred.isPresent() ? preferred : longest;
+  }
+
+  private Optional<String> chooseLonger(Optional<String> current, String candidate) {
+    if (current.isEmpty() || candidate.length() > current.get().length()) {
+      return Optional.of(candidate);
+    }
+    return current;
+  }
+
+  private Optional<String> getFallbackStringValue(JsonElement element) {
+    if (element == null || element.isJsonNull()) {
+      return Optional.empty();
+    }
+    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+      return Optional.of(element.getAsString());
+    }
+    if (element.isJsonObject()) {
+      JsonObject object = element.getAsJsonObject();
+      Optional<String> value = getStringProperty(object, "value");
+      if (value.isPresent()) {
+        return value;
+      }
+      return getStringProperty(object, REPLY_TEXT_KEYS);
+    }
+    return Optional.empty();
+  }
+
+  private boolean looksLikeReplyTextKey(String key) {
+    String normalized = key.toLowerCase();
+    return normalized.contains("reply")
+        || normalized.contains("comment")
+        || normalized.contains("message")
+        || normalized.contains("review")
+        || normalized.contains("finding")
+        || normalized.contains("issue")
+        || normalized.contains("suggest")
+        || normalized.contains("reason")
+        || normalized.contains("problem")
+        || normalized.contains("description")
+        || normalized.contains("detail");
+  }
+
+  private boolean isMetadataKey(String key) {
+    return matchesAnyKey(key, FILENAME_KEYS)
+        || matchesAnyKey(key, LINE_NUMBER_KEYS)
+        || matchesAnyKey(key, CODE_SNIPPET_KEYS)
+        || matchesAnyKey(key, CODE_TOKEN_KEYS)
+        || matchesAnyKey(key, SCORE_KEYS)
+        || "id".equalsIgnoreCase(key)
+        || "changeId".equalsIgnoreCase(key)
+        || "relevance".equalsIgnoreCase(key)
+        || "repeated".equalsIgnoreCase(key)
+        || "conflicting".equalsIgnoreCase(key);
+  }
+
+  private boolean matchesAnyKey(String key, List<String> candidates) {
+    return candidates.stream().anyMatch(candidate -> candidate.equalsIgnoreCase(key));
   }
 
   private Optional<AIChatResponseContent> toOptionalContent(AIChatResponseContent responseContent) {

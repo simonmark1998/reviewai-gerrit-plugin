@@ -1,0 +1,17 @@
+{
+  "id": "resp_test",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": {
+            "value": "{\"replies\":[{\"body\":\"Agent comment from nested location fields.\",\"score\":-1,\"location\":{\"path\":\"test_file.py\",\"startLine\":21},\"range\":{\"code\":\"loaded_module = importclass(module_name, fromlist=[class_name])\",\"token\":\"importclass\"}}]}"
+          }
+        }
+      ]
+    }
+  ]
+}

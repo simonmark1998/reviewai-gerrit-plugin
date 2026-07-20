@@ -21,7 +21,6 @@ import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.
 import static com.googlesource.gerrit.plugins.aicodereview.utils.TextUtils.joinWithNewLine;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -335,6 +334,39 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
+  public void patchSetCreatedAzureAgentParsesReplyBodyPathAndLineAliases() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+    mockAzureAgentResponse("agentResponseBodyPathLineJson.json");
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = getSentReviewInput();
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Agent comment from a body field.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertNull(comment.range);
+    Assert.assertEquals(Short.valueOf((short) -1), reviewInput.labels.get("Code-Review"));
+  }
+
+  @Test
+  public void patchSetCreatedAzureAgentParsesNestedLocationAndRangeAliases() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+    mockAzureAgentResponse("agentResponseNestedLocationJson.json");
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = getSentReviewInput();
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Agent comment from nested location fields.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertEquals(20, comment.range.startCharacter);
+    Assert.assertEquals(31, comment.range.endCharacter);
+    Assert.assertEquals(Short.valueOf((short) -1), reviewInput.labels.get("Code-Review"));
+  }
+
+  @Test
   public void patchSetCreatedCommentsJsonMessageContentIsParsedIntoInlineComments()
       throws Exception {
     when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
@@ -396,7 +428,8 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
-  public void patchSetCreatedPositiveJsonMessageContentSendsLabelOnlyVote() throws Exception {
+  public void patchSetCreatedPositiveJsonMessageContentSendsInlineCommentAndVote()
+      throws Exception {
     when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
         .thenReturn(false);
     when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
@@ -418,7 +451,8 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
     handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
 
     ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
-    Assert.assertNull(reviewInput.comments);
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("The change looks good.", comment.message);
     Assert.assertNull(reviewInput.message);
     Assert.assertEquals(Short.valueOf((short) 1), reviewInput.labels.get("Code-Review"));
   }
@@ -445,7 +479,11 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
 
     handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
 
-    verify(revisionApiMock, never()).review(Mockito.any(ReviewInput.class));
+    ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
+    ReviewInput.CommentInput comment = reviewInput.comments.get("/PATCHSET_LEVEL").get(0);
+    Assert.assertEquals(
+        "this raw JSON must not be posted as a Gerrit review comment", comment.message);
+    Assert.assertFalse(comment.message.contains("\"unexpected\""));
   }
 
   @Test

@@ -1,0 +1,17 @@
+{
+  "id": "resp_test",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": {
+            "value": "{\"replies\":[{\"body\":\"Agent comment from a body field.\",\"score\":-1,\"path\":\"test_file.py\",\"line\":21,\"code\":\"not an exact snippet\"}]}"
+          }
+        }
+      ]
+    }
+  ]
+}

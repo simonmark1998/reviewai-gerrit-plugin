@@ -150,6 +150,7 @@ public class PatchSetReviewer {
       log.warn("AIChat response contains no replies and no message content");
       return;
     }
+    List<ReviewBatch> hiddenReviewBatches = new ArrayList<>();
     for (AIChatReplyItem replyItem : reviewReply.getReplies()) {
       String reply = getReplyText(replyItem);
       if (reply.isBlank()) {
@@ -165,9 +166,6 @@ public class PatchSetReviewer {
         log.debug("Score added: {}", score);
         reviewScores.add(score);
       }
-      if (changeSetData.getReplyFilterEnabled() && isHidden) {
-        continue;
-      }
       if (changeSetData.getDebugReviewMode()) {
         reply += debugCodeBlocksReview.getDebugCodeBlock(replyItem, isHidden);
       }
@@ -177,7 +175,15 @@ public class PatchSetReviewer {
       } else {
         setPatchSetReviewBatchMap(batchMap, replyItem);
       }
+      if (changeSetData.getReplyFilterEnabled() && isHidden) {
+        hiddenReviewBatches.add(batchMap);
+        continue;
+      }
       reviewBatches.add(batchMap);
+    }
+    if (reviewBatches.isEmpty() && !hiddenReviewBatches.isEmpty()) {
+      log.warn("AIChat reply filter hid every reply; submitting filtered replies as fallback");
+      reviewBatches.addAll(hiddenReviewBatches);
     }
   }
 

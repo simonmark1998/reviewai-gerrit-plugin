@@ -60,6 +60,7 @@ public class EventHandlerExecutor {
     EventHandlerTask task = childInjector.getInstance(EventHandlerTask.class);
     ChangeSetData changeSetData = childInjector.getInstance(ChangeSetData.class);
     changeSetData.setForcedReview(true);
+    changeSetData.setReplyFilterEnabled(false);
     executor.execute(task);
   }
 }
