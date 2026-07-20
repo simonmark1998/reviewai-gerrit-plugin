@@ -1,0 +1,23 @@
+{
+  "meta_b": {
+    "name": "new_file.py",
+    "content_type": "text/x-python",
+    "lines": 3
+  },
+  "change_type": "ADDED",
+  "diff_header": [
+    "diff --git /dev/null b/new_file.py",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/new_file.py"
+  ],
+  "content": [
+    {
+      "b": [
+        "def added_function(value):",
+        "    result = value + 1",
+        "    return result"
+      ]
+    }
+  ]
+}

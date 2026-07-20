@@ -46,6 +46,7 @@ import com.googlesource.gerrit.plugins.aicodereview.mode.stateless.client.prompt
 import com.googlesource.gerrit.plugins.aicodereview.settings.Settings;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -302,6 +303,53 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
             "__files/stateless/gerritPatchSetReviewJsonContent.json", ReviewInput.class);
     Gson gson = OutputFormat.JSON_COMPACT.newGson();
     Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
+  @Test
+  public void patchSetCreatedAddedFileIsIncludedInReviewPrompt() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    Map<String, FileInfo> files =
+        new LinkedHashMap<>(
+            readTestFileToType(
+                "__files/stateless/gerritPatchSetFiles.json",
+                new TypeLiteral<Map<String, FileInfo>>() {}.getType()));
+    FileInfo newFileInfo = new FileInfo();
+    newFileInfo.status = 'A';
+    newFileInfo.linesInserted = 3;
+    newFileInfo.size = 80;
+    files.put("new_file.py", newFileInfo);
+    when(revisionApiMock.files(0)).thenReturn(files);
+
+    FileApi newFileMock = mock(FileApi.class);
+    when(revisionApiMock.file("new_file.py")).thenReturn(newFileMock);
+    DiffInfo newFileDiff =
+        readTestFileToClass("__files/stateless/gerritPatchSetDiffNewFile.json", DiffInfo.class);
+    when(newFileMock.diff(0)).thenReturn(newFileDiff);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseReview.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    testRequestSent();
+    String userPrompt = prompts.get(1).getAsJsonObject().get("content").getAsString();
+    Assert.assertTrue(userPrompt.contains("\"name\":\"new_file.py\""));
+    Assert.assertTrue(userPrompt.contains("\"change_type\":\"ADDED\""));
+    Assert.assertTrue(userPrompt.contains("def added_function(value):"));
   }
 
   @Test

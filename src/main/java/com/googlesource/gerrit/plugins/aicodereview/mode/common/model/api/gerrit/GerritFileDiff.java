@@ -25,6 +25,9 @@ public abstract class GerritFileDiff {
   @SerializedName("meta_b")
   protected Meta metaB;
 
+  @SerializedName("change_type")
+  protected String changeType;
+
   @Data
   public static class Meta {
     String name;

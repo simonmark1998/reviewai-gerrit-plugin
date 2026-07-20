@@ -1,7 +1,7 @@
 console.debug("window.Gerrit =", window.Gerrit);
 
 Gerrit.install(plugin => {
-  const LABEL = "AI Review";
+  const LABEL = "\u{1F916} AI Review";
   const WORKING_LABEL = "Reviewing...";
   const STARTED_LABEL = "Review Started";
   const FAILED_LABEL = "Review Failed";

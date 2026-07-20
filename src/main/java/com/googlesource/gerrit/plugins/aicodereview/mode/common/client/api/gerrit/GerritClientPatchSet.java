@@ -115,6 +115,9 @@ public class GerritClientPatchSet extends GerritClientAccount {
         .ifPresent(meta -> gerritPatchSetFileDiff.setMetaA(GerritClientPatchSet.toMeta(meta)));
     Optional.ofNullable(diff.metaB)
         .ifPresent(meta -> gerritPatchSetFileDiff.setMetaB(GerritClientPatchSet.toMeta(meta)));
+    Optional.ofNullable(diff.changeType)
+        .map(Enum::name)
+        .ifPresent(gerritPatchSetFileDiff::setChangeType);
     Optional.ofNullable(diff.content)
         .ifPresent(
             content ->
@@ -125,6 +128,7 @@ public class GerritClientPatchSet extends GerritClientAccount {
     GerritReviewFileDiff gerritReviewFileDiff =
         new GerritReviewFileDiff(
             gerritPatchSetFileDiff.getMetaA(), gerritPatchSetFileDiff.getMetaB());
+    gerritReviewFileDiff.setChangeType(gerritPatchSetFileDiff.getChangeType());
     FileDiffProcessed fileDiffProcessed =
         new FileDiffProcessed(config, isCommitMessage, gerritPatchSetFileDiff);
     fileDiffsProcessed.put(buildFileDiffKey(change.getFullChangeId(), filename), fileDiffProcessed);
