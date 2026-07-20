@@ -98,7 +98,8 @@ public class GerritClientReview extends GerritClientAccount {
       List<ReviewBatch> reviewBatches, ChangeSetData changeSetData, Integer reviewScore) {
     ReviewInput reviewInput = ReviewInput.create();
     Map<String, List<CommentInput>> comments = new HashMap<>();
-    String systemMessage = localizer.getText("message.empty.review");
+    boolean hasExplicitSystemMessage = changeSetData.getReviewSystemMessage() != null;
+    String systemMessage = null;
     if (changeSetData.getReviewSystemMessage() != null) {
       systemMessage = changeSetData.getReviewSystemMessage();
     } else if (!changeSetData.shouldHideAICodeReview()) {
@@ -107,7 +108,7 @@ public class GerritClientReview extends GerritClientAccount {
         reviewInput.label(LabelId.CODE_REVIEW, reviewScore);
       }
     }
-    updateSystemMessage(reviewInput, comments.isEmpty(), systemMessage);
+    updateSystemMessage(reviewInput, comments.isEmpty() && hasExplicitSystemMessage, systemMessage);
     if (!comments.isEmpty()) {
       reviewInput.comments = comments;
     }

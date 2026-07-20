@@ -1,0 +1,9 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "[{\"comment\":\"Comment from array JSON.\",\"score\":-1,\"file\":\"test_file.py\",\"line\":21,\"snippet\":\"loaded_module = importclass(module_name, fromlist=[class_name])\",\"token\":\"importclass\"}]"
+      }
+    }
+  ]
+}

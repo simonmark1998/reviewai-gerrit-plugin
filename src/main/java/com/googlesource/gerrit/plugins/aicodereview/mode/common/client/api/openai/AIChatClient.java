@@ -18,6 +18,7 @@ import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getGs
 import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.isJsonString;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.unwrapJsonCode;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -34,6 +35,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
@@ -41,6 +43,21 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public abstract class AIChatClient extends ClientBase {
+  private static final List<String> RESPONSE_ARRAY_KEYS =
+      Arrays.asList("replies", "comments", "reviews", "findings", "issues", "suggestions");
+  private static final List<String> RESPONSE_TEXT_KEYS =
+      Arrays.asList("response", "content", "message", "text", "output_text");
+  private static final List<String> REPLY_TEXT_KEYS =
+      Arrays.asList("reply", "comment", "message", "text", "body", "content");
+  private static final List<String> FILENAME_KEYS =
+      Arrays.asList("filename", "file", "fileName", "path");
+  private static final List<String> LINE_NUMBER_KEYS =
+      Arrays.asList("lineNumber", "line", "line_number");
+  private static final List<String> CODE_SNIPPET_KEYS =
+      Arrays.asList("codeSnippet", "snippet", "code", "code_snippet");
+  private static final List<String> CODE_TOKEN_KEYS =
+      Arrays.asList("codeToken", "token", "identifier", "symbol", "code_token");
+
   protected boolean isCommentEvent = false;
   @Getter protected String requestBody;
 
@@ -132,23 +149,142 @@ public abstract class AIChatClient extends ClientBase {
 
   private AIChatResponseContent convertResponseContentFromJson(String content) {
     JsonElement parsed = JsonParser.parseString(content);
+    if (parsed.isJsonArray()) {
+      return convertReplyArray(parsed.getAsJsonArray());
+    }
     if (!parsed.isJsonObject()) {
       log.warn("AIChat JSON response was not an object. Skipping.");
       return new AIChatResponseContent();
     }
     JsonObject object = parsed.getAsJsonObject();
-    if (object.has("replies")) {
-      return getGson().fromJson(object, AIChatResponseContent.class);
+    for (String key : RESPONSE_ARRAY_KEYS) {
+      Optional<AIChatResponseContent> responseContent = convertReplyArrayProperty(object, key);
+      if (responseContent.isPresent()) {
+        return responseContent.get();
+      }
     }
-    if (object.has("reply")) {
-      AIChatResponseContent responseContent = new AIChatResponseContent();
-      List<AIChatReplyItem> replies = new ArrayList<>();
-      replies.add(getGson().fromJson(object, AIChatReplyItem.class));
-      responseContent.setReplies(replies);
-      return responseContent;
+    Optional<AIChatReplyItem> replyItem = convertReplyObject(object);
+    if (replyItem.isPresent()) {
+      return convertSingleReply(replyItem.get(), object);
+    }
+    for (String key : RESPONSE_TEXT_KEYS) {
+      Optional<String> text = getStringProperty(object, key);
+      if (text.isPresent()) {
+        return convertResponseContentFromText(text.get());
+      }
     }
     log.warn("AIChat JSON response contained neither `replies` nor `reply`. Skipping.");
     return new AIChatResponseContent();
+  }
+
+  private Optional<AIChatResponseContent> convertReplyArrayProperty(JsonObject object, String key) {
+    if (!object.has(key)) {
+      return Optional.empty();
+    }
+    JsonElement element = object.get(key);
+    if (element.isJsonArray()) {
+      return Optional.of(convertReplyArray(element.getAsJsonArray(), object));
+    }
+    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+      return Optional.of(convertResponseContentFromText(element.getAsString()));
+    }
+    return Optional.of(new AIChatResponseContent());
+  }
+
+  private AIChatResponseContent convertReplyArray(JsonArray array) {
+    return convertReplyArray(array, null);
+  }
+
+  private AIChatResponseContent convertReplyArray(JsonArray array, JsonObject sourceObject) {
+    AIChatResponseContent responseContent = new AIChatResponseContent();
+    List<AIChatReplyItem> replies = new ArrayList<>();
+    for (JsonElement element : array) {
+      Optional<AIChatReplyItem> replyItem = convertReplyElement(element);
+      replyItem.ifPresent(replies::add);
+    }
+    responseContent.setReplies(replies);
+    if (sourceObject != null) {
+      getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+    }
+    return responseContent;
+  }
+
+  private AIChatResponseContent convertSingleReply(
+      AIChatReplyItem replyItem, JsonObject sourceObject) {
+    AIChatResponseContent responseContent = new AIChatResponseContent();
+    List<AIChatReplyItem> replies = new ArrayList<>();
+    replies.add(replyItem);
+    responseContent.setReplies(replies);
+    getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+    return responseContent;
+  }
+
+  private Optional<AIChatReplyItem> convertReplyElement(JsonElement element) {
+    if (element.isJsonObject()) {
+      return convertReplyObject(element.getAsJsonObject());
+    }
+    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+      AIChatReplyItem replyItem = new AIChatReplyItem();
+      replyItem.setReply(element.getAsString());
+      return Optional.of(replyItem);
+    }
+    return Optional.empty();
+  }
+
+  private Optional<AIChatReplyItem> convertReplyObject(JsonObject object) {
+    AIChatReplyItem replyItem = getGson().fromJson(object, AIChatReplyItem.class);
+    if (replyItem.getReply() == null) {
+      getStringProperty(object, REPLY_TEXT_KEYS).ifPresent(replyItem::setReply);
+    }
+    if (replyItem.getFilename() == null) {
+      getStringProperty(object, FILENAME_KEYS).ifPresent(replyItem::setFilename);
+    }
+    if (replyItem.getLineNumber() == null) {
+      getIntegerProperty(object, LINE_NUMBER_KEYS).ifPresent(replyItem::setLineNumber);
+    }
+    if (replyItem.getCodeSnippet() == null) {
+      getStringProperty(object, CODE_SNIPPET_KEYS).ifPresent(replyItem::setCodeSnippet);
+    }
+    if (replyItem.getCodeToken() == null) {
+      getStringProperty(object, CODE_TOKEN_KEYS).ifPresent(replyItem::setCodeToken);
+    }
+    return replyItem.getReply() == null ? Optional.empty() : Optional.of(replyItem);
+  }
+
+  private Optional<String> getStringProperty(JsonObject object, List<String> keys) {
+    for (String key : keys) {
+      Optional<String> value = getStringProperty(object, key);
+      if (value.isPresent()) {
+        return value;
+      }
+    }
+    return Optional.empty();
+  }
+
+  private Optional<String> getStringProperty(JsonObject object, String key) {
+    if (!object.has(key)) {
+      return Optional.empty();
+    }
+    JsonElement element = object.get(key);
+    if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+      return Optional.empty();
+    }
+    String value = element.getAsString();
+    return value.isEmpty() ? Optional.empty() : Optional.of(value);
+  }
+
+  private Optional<Integer> getIntegerProperty(JsonObject object, List<String> keys) {
+    for (String key : keys) {
+      if (!object.has(key) || !object.get(key).isJsonPrimitive()) {
+        continue;
+      }
+      try {
+        return Optional.of(object.get(key).getAsInt());
+      } catch (NumberFormatException | UnsupportedOperationException e) {
+        log.warn("AIChat line number field `{}` was not an integer", key, e);
+      }
+    }
+    return Optional.empty();
   }
 
   private String getArgumentAsString(List<AIChatToolCall> toolCalls, int ind) {

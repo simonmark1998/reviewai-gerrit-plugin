@@ -23,12 +23,15 @@ public class JsonTextUtils extends TextUtils {
       Pattern.compile(
           "^.*?" + CODE_DELIMITER + "json\\s*(.*)\\s*" + CODE_DELIMITER + ".*$", Pattern.DOTALL);
   private static final Pattern JSON_OBJECT = Pattern.compile("^\\{.*\\}$", Pattern.DOTALL);
+  private static final Pattern JSON_ARRAY = Pattern.compile("^\\[.*\\]$", Pattern.DOTALL);
 
   public static String unwrapJsonCode(String text) {
     return JSON_DELIMITED.matcher(text).replaceAll("$1");
   }
 
   public static boolean isJsonString(String text) {
-    return JSON_OBJECT.matcher(text).matches() || JSON_DELIMITED.matcher(text).matches();
+    return JSON_OBJECT.matcher(text).matches()
+        || JSON_ARRAY.matcher(text).matches()
+        || JSON_DELIMITED.matcher(text).matches();
   }
 }

@@ -20,6 +20,8 @@ import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.
 import static com.googlesource.gerrit.plugins.aicodereview.utils.TextUtils.joinWithNewLine;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -269,6 +271,67 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
+  public void patchSetCreatedCommentsJsonMessageContentIsParsedIntoInlineComments()
+      throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseCommentsJsonContent.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Comment from comments JSON.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertEquals(20, comment.range.startCharacter);
+    Assert.assertEquals(31, comment.range.endCharacter);
+  }
+
+  @Test
+  public void patchSetCreatedArrayJsonMessageContentIsParsedIntoInlineComments() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseArrayJsonContent.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Comment from array JSON.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertEquals(20, comment.range.startCharacter);
+    Assert.assertEquals(31, comment.range.endCharacter);
+  }
+
+  @Test
   public void patchSetCreatedUnexpectedJsonMessageContentIsNotPostedRaw() throws Exception {
     when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
         .thenReturn(false);
@@ -290,9 +353,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
 
     handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
 
-    ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
-    Assert.assertNull(reviewInput.comments);
-    Assert.assertFalse(reviewInput.message.contains("\"unexpected\""));
+    verify(revisionApiMock, never()).review(Mockito.any(ReviewInput.class));
   }
 
   @Test
