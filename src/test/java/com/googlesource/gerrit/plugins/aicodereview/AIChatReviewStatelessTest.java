@@ -198,6 +198,45 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         gson.toJson(gerritPatchSetReview), gson.toJson(captor.getAllValues().get(0)));
   }
 
+  /**
+   * Verifies that when the AI response includes a {@code codeToken} field, the resulting inline
+   * Gerrit comment highlights only that specific identifier rather than the full code snippet.
+   *
+   * <p>Test scenario: the AI returns {@code codeToken: "importclass"} for the line-21 comment.
+   * Expected behaviour: the comment range narrows from the full-line span (start_character=4,
+   * end_character=67) to the exact token span (start_character=20, end_character=31).
+   */
+  @Test
+  public void patchSetCreatedCodeTokenPrecisionRange() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseWithCodeToken.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ArgumentCaptor<ReviewInput> captor = testRequestSent();
+
+    ReviewInput expectedReview =
+        readTestFileToClass(
+            "__files/stateless/gerritPatchSetReviewWithCodeToken.json", ReviewInput.class);
+    Gson gson = OutputFormat.JSON_COMPACT.newGson();
+    Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
   @Test
   public void patchSetDisableUserGroup() {
     when(globalConfig.getString(Mockito.eq("disabledGroups"), Mockito.anyString()))

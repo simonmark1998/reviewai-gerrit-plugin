@@ -63,6 +63,30 @@ public class InlineCode {
     return Optional.ofNullable(codeFinder.findCommentedCode(replyItem, commentedLine));
   }
 
+  /**
+   * Finds the precise character range of {@code token} within the line identified by {@code
+   * lineRange}. This is used to pinpoint a specific identifier (variable, function name, keyword,
+   * etc.) referenced by a review comment.
+   */
+  public Optional<GerritCodeRange> findTokenInLine(String token, GerritCodeRange lineRange) {
+    int lineNum = lineRange.getStartLine();
+    String lineContent = getLineFromLineNumber(lineNum);
+    if (lineContent == null) {
+      return Optional.empty();
+    }
+    int tokenStart = lineContent.indexOf(token);
+    if (tokenStart < 0) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        GerritCodeRange.builder()
+            .startLine(lineNum)
+            .endLine(lineNum)
+            .startCharacter(tokenStart)
+            .endCharacter(tokenStart + token.length())
+            .build());
+  }
+
   private String getLineSlice(int line_num) {
     String line = getLineFromLineNumber(line_num);
     if (line == null) {

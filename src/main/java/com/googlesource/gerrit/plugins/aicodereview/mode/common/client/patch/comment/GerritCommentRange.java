@@ -38,8 +38,8 @@ public class GerritCommentRange {
     if (filename == null || filename.equals("/COMMIT_MSG")) {
       return gerritCommentRange;
     }
-    if (replyItem.getCodeSnippet() == null) {
-      log.info("CodeSnippet is null in reply '{}'.", replyItem);
+    if (replyItem.getCodeSnippet() == null && replyItem.getCodeToken() == null) {
+      log.info("CodeSnippet and codeToken are both null in reply '{}'.", replyItem);
       return gerritCommentRange;
     }
     if (!fileDiffsProcessed.containsKey(filename)) {
@@ -51,7 +51,22 @@ public class GerritCommentRange {
       return gerritCommentRange;
     }
     InlineCode inlineCode = new InlineCode(fileDiffsProcessed.get(filename));
-    gerritCommentRange = inlineCode.findCommentRange(replyItem);
+    // When codeToken is provided: first find the line range via codeSnippet, then locate the
+    // token within that line for a precise character-level highlight
+    if (replyItem.getCodeToken() != null && !replyItem.getCodeToken().isEmpty()) {
+      Optional<GerritCodeRange> snippetRange =
+          replyItem.getCodeSnippet() != null
+              ? inlineCode.findCommentRange(replyItem)
+              : Optional.empty();
+      gerritCommentRange =
+          snippetRange.isPresent()
+              ? inlineCode.findTokenInLine(replyItem.getCodeToken(), snippetRange.get())
+              : Optional.empty();
+    }
+    // Fall back to codeSnippet-based range if codeToken range was not found
+    if (gerritCommentRange.isEmpty() && replyItem.getCodeSnippet() != null) {
+      gerritCommentRange = inlineCode.findCommentRange(replyItem);
+    }
     if (gerritCommentRange.isEmpty()) {
       log.info("Inline code not found for reply {}", replyItem);
     }

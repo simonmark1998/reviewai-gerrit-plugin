@@ -53,9 +53,8 @@ public class EventHandlerExecutor {
   }
 
   public void executeManualReview(Configuration config, GerritChange gerritChange) {
-    log.error("EXECUTEMANUALREVIEW CALLED");
-    log.error("Config: {}", config);
-    log.error("Change: {}", gerritChange);
+    log.info("Manual AI review execution requested for change: {}", gerritChange);
+    log.debug("Manual AI review config: {}", config);
     GerritEventContextModule contextModule = new GerritEventContextModule(config, gerritChange);
     Injector childInjector = injector.createChildInjector(contextModule);
     EventHandlerTask task = childInjector.getInstance(EventHandlerTask.class);

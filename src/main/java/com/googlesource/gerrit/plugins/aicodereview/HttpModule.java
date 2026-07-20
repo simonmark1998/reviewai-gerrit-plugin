@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai;
+package com.googlesource.gerrit.plugins.aicodereview;
 
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import com.google.gerrit.extensions.registration.DynamicSet;
+import com.google.gerrit.extensions.webui.JavaScriptPlugin;
+import com.google.gerrit.extensions.webui.WebUiPlugin;
+import com.google.inject.servlet.ServletModule;
 
-@EqualsAndHashCode(callSuper = true)
-@Data
-public class AIChatReplyItem extends AIChatDialogueItem {
-  private String reply;
-  private Integer score;
-  private Double relevance;
-  private boolean repeated;
-  private boolean conflicting;
-  private String codeToken;
+public class HttpModule extends ServletModule {
+  @Override
+  protected void configureServlets() {
+    DynamicSet.bind(binder(), WebUiPlugin.class)
+        .toInstance(new JavaScriptPlugin("ai-code-review.js"));
+  }
 }

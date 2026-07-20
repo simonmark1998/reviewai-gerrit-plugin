@@ -49,7 +49,6 @@ public class ManualReviewAction
 
   @Override
   public Response<String> apply(ChangeResource rsrc, Input input) throws Exception {
-    log.error("APPLY CALLED");
     Change change = rsrc.getChange();
     log.info("Manual AI review triggered for change: {}", change.getId());
 

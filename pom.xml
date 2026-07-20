@@ -24,6 +24,7 @@
                         <manifestEntries>
                             <Gerrit-PluginName>ai-code-review</Gerrit-PluginName>
                             <Gerrit-Module>com.googlesource.gerrit.plugins.aicodereview.Module</Gerrit-Module>
+                            <Gerrit-HttpModule>com.googlesource.gerrit.plugins.aicodereview.HttpModule</Gerrit-HttpModule>
 
                             <Implementation-Vendor>OpenSource Gerrit Plugin</Implementation-Vendor>
                             <Implementation-URL>https://gerrit.googlesource.com/plugins/ai-code-review</Implementation-URL>
@@ -100,6 +101,7 @@
                                     <manifestEntries>
                                         <Gerrit-PluginName>ai-code-review</Gerrit-PluginName>
                                         <Gerrit-Module>com.googlesource.gerrit.plugins.aicodereview.Module</Gerrit-Module>
+                                        <Gerrit-HttpModule>com.googlesource.gerrit.plugins.aicodereview.HttpModule</Gerrit-HttpModule>
                                         <Implementation-Vendor>OpenSource Gerrit Plugin</Implementation-Vendor>
                                         <Implementation-URL>https://gerrit.googlesource.com/plugins/ai-code-review</Implementation-URL>
                                         <Implementation-Title>AI Code Review Gerrit Plugin</Implementation-Title>

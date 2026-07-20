@@ -37,6 +37,9 @@
               },
               "codeSnippet": {
                 "type": "string"
+              },
+              "codeToken": {
+                "type": "string"
               }
             },
             "required": [
