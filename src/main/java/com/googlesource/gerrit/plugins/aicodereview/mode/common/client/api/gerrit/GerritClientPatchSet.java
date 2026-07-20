@@ -83,23 +83,65 @@ public class GerritClientPatchSet extends GerritClientAccount {
     try (ManualRequestContext requestContext = config.openRequestContext()) {
       for (String filename : files) {
         isCommitMessage = filename.equals("/COMMIT_MSG");
-        if (!isCommitMessage && !matchesExtensionList(filename, enabledFileExtensions)) {
-          continue;
+        boolean matchesEnabledExtension =
+            isCommitMessage || matchesExtensionList(filename, enabledFileExtensions);
+        if (!matchesEnabledExtension) {
+          log.info(
+              "File '{}' does not match enabledFileExtensions {}, but Gerrit diff will be checked"
+                  + " and included if it is text.",
+              filename,
+              enabledFileExtensions);
         }
-        DiffInfo diff =
-            config
-                .getGerritApi()
-                .changes()
-                .id(
-                    change.getProjectName(),
-                    change.getBranchNameKey().shortName(),
-                    change.getChangeKey().get())
-                .current()
-                .file(filename)
-                .diff(revisionBase);
-        processFileDiff(change, filename, diff);
+        try {
+          DiffInfo diff =
+              config
+                  .getGerritApi()
+                  .changes()
+                  .id(
+                      change.getProjectName(),
+                      change.getBranchNameKey().shortName(),
+                      change.getChangeKey().get())
+                  .current()
+                  .file(filename)
+                  .diff(revisionBase);
+          if (!isReviewableDiff(change, filename, diff)) {
+            continue;
+          }
+          processFileDiff(change, filename, diff);
+        } catch (Exception e) {
+          log.warn(
+              "File '{}' not reviewed because Gerrit diff retrieval failed for change {}",
+              filename,
+              change.getFullChangeId(),
+              e);
+        }
       }
     }
+  }
+
+  private boolean isReviewableDiff(GerritChange change, String filename, DiffInfo diff) {
+    if (diff == null) {
+      log.info(
+          "File '{}' not reviewed because Gerrit returned an empty diff for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    if (Boolean.TRUE.equals(diff.binary)) {
+      log.info(
+          "File '{}' not reviewed because Gerrit marked it as binary for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    if (diff.content == null || diff.content.isEmpty()) {
+      log.info(
+          "File '{}' not reviewed because Gerrit returned no text diff content for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    return true;
   }
 
   private boolean isChangeSetBased(ChangeSetData changeSetData) {

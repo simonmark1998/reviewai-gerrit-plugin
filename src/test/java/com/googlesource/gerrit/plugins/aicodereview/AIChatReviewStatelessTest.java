@@ -321,11 +321,11 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
     newFileInfo.status = 'A';
     newFileInfo.linesInserted = 3;
     newFileInfo.size = 80;
-    files.put("new_file.py", newFileInfo);
+    files.put("new_file.yaml", newFileInfo);
     when(revisionApiMock.files(0)).thenReturn(files);
 
     FileApi newFileMock = mock(FileApi.class);
-    when(revisionApiMock.file("new_file.py")).thenReturn(newFileMock);
+    when(revisionApiMock.file("new_file.yaml")).thenReturn(newFileMock);
     DiffInfo newFileDiff =
         readTestFileToClass("__files/stateless/gerritPatchSetDiffNewFile.json", DiffInfo.class);
     when(newFileMock.diff(0)).thenReturn(newFileDiff);
@@ -347,9 +347,9 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
 
     testRequestSent();
     String userPrompt = prompts.get(1).getAsJsonObject().get("content").getAsString();
-    Assert.assertTrue(userPrompt.contains("\"name\":\"new_file.py\""));
+    Assert.assertTrue(userPrompt.contains("\"name\":\"new_file.yaml\""));
     Assert.assertTrue(userPrompt.contains("\"change_type\":\"ADDED\""));
-    Assert.assertTrue(userPrompt.contains("def added_function(value):"));
+    Assert.assertTrue(userPrompt.contains("featureFlag: true"));
   }
 
   @Test

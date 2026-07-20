@@ -287,7 +287,8 @@ non bearer token authorization e.g. api-key used for AZUREOpenAI.
   in the topic are reviewed.
 - `disabledTopicFilter`: Works in contrast to enabledTopicFilter, excluding Patch Sets and comments from review if their
   topics contain specified keywords.
-- `enabledFileExtensions`: This limits the reviewed files to the given types. Default file extensions are ".py, .java,
+- `enabledFileExtensions`: Preferred file extensions for reviewed files. In stateless mode, Gerrit text diffs outside
+  this list are still checked and included when they are not binary and stay under `maxReviewFileSize`. Default file extensions are ".py, .java,
   .js, .ts, .html, .css, .cs, .cpp, .c, .h, .php, .rb, .swift, .kt, .r, .jl, .go, .scala, .pl, .pm, .rs, .dart, .lua,
   .sh, .vb, .bat".
 - `enabledVoting`: Initially disabled (false). If set to true, allows ChatGPT to cast a vote on each reviewed Patch Set

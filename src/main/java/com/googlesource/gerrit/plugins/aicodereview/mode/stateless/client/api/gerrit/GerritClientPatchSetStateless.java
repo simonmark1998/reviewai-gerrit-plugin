@@ -173,17 +173,24 @@ public class GerritClientPatchSetStateless extends GerritClientPatchSet
           .filter(
               fileEntry -> {
                 String filename = fileEntry.getKey();
-                if (!filename.equals("/COMMIT_MSG") || config.getAIReviewCommitMessages()) {
-                  if (fileEntry.getValue().size > config.getMaxReviewFileSize()) {
-                    log.info(
-                        "File '{}' not reviewed because its size exceeds the fixed maximum"
-                            + " allowable size.",
-                        filename);
-                  } else {
-                    return true;
-                  }
+                FileInfo fileInfo = fileEntry.getValue();
+                if (filename.equals("/COMMIT_MSG") && !config.getAIReviewCommitMessages()) {
+                  log.info("Commit message not reviewed because aiReviewCommitMessages=false");
+                  return false;
                 }
-                return false;
+                if (Boolean.TRUE.equals(fileInfo.binary)) {
+                  log.info("File '{}' not reviewed because Gerrit marked it as binary.", filename);
+                  return false;
+                }
+                if (fileInfo.size > config.getMaxReviewFileSize()) {
+                  log.info(
+                      "File '{}' not reviewed because its size {} exceeds maxReviewFileSize {}.",
+                      filename,
+                      fileInfo.size,
+                      config.getMaxReviewFileSize());
+                  return false;
+                }
+                return true;
               })
           .map(Map.Entry::getKey)
           .collect(toList());
