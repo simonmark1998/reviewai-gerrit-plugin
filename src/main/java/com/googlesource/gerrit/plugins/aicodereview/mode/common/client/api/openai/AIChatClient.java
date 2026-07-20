@@ -15,16 +15,25 @@
 package com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.openai;
 
 import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getGson;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.isJsonString;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.unwrapJsonCode;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.ClientBase;
+import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatReplyItem;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatResponseContent;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatResponseMessage;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatResponseStreamed;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatResponseUnstreamed;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatToolCall;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
@@ -53,8 +62,14 @@ public abstract class AIChatClient extends ClientBase {
     } else {
       AIChatResponseUnstreamed AIChatResponseUnstreamed =
           getGson().fromJson(body, AIChatResponseUnstreamed.class);
-      return getResponseContent(
-          AIChatResponseUnstreamed.getChoices().get(0).getMessage().getToolCalls());
+      AIChatResponseMessage message = AIChatResponseUnstreamed.getChoices().get(0).getMessage();
+      if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
+        return getResponseContent(message.getToolCalls());
+      }
+      if (message.getContent() != null && !message.getContent().isEmpty()) {
+        return convertResponseContentFromText(message.getContent());
+      }
+      throw new IOException("AIChat response contains neither tool_calls nor message content");
     }
   }
 
@@ -99,8 +114,38 @@ public abstract class AIChatClient extends ClientBase {
     return Optional.ofNullable(content);
   }
 
+  protected AIChatResponseContent convertResponseContentFromText(String content) {
+    if (content == null) {
+      return new AIChatResponseContent("");
+    }
+    String trimmed = content.trim();
+    if (isJsonString(trimmed)) {
+      try {
+        return convertResponseContentFromJson(unwrapJsonCode(trimmed));
+      } catch (JsonSyntaxException e) {
+        log.warn("AIChat message content looked like JSON but could not be parsed", e);
+      }
+    }
+    return new AIChatResponseContent(content);
+  }
+
   private AIChatResponseContent convertResponseContentFromJson(String content) {
-    return getGson().fromJson(content, AIChatResponseContent.class);
+    JsonElement parsed = JsonParser.parseString(content);
+    if (!parsed.isJsonObject()) {
+      return new AIChatResponseContent(content);
+    }
+    JsonObject object = parsed.getAsJsonObject();
+    if (object.has("replies")) {
+      return getGson().fromJson(object, AIChatResponseContent.class);
+    }
+    if (object.has("reply")) {
+      AIChatResponseContent responseContent = new AIChatResponseContent();
+      List<AIChatReplyItem> replies = new ArrayList<>();
+      replies.add(getGson().fromJson(object, AIChatReplyItem.class));
+      responseContent.setReplies(replies);
+      return responseContent;
+    }
+    return new AIChatResponseContent(content);
   }
 
   private String getArgumentAsString(List<AIChatToolCall> toolCalls, int ind) {

@@ -14,10 +14,6 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.mode.stateful.client.api.chatai;
 
-import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getGson;
-import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.isJsonString;
-import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.unwrapJsonCode;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -103,13 +99,6 @@ public class AIChatClientStateful extends AIChatClient implements ChatAIClient {
     if (responseText == null) {
       throw new RuntimeException("ChatGPT thread message response content is null");
     }
-    if (isJsonString(responseText)) {
-      return extractResponseContent(responseText);
-    }
-    return new AIChatResponseContent(responseText);
-  }
-
-  private AIChatResponseContent extractResponseContent(String responseText) {
-    return getGson().fromJson(unwrapJsonCode(responseText), AIChatResponseContent.class);
+    return convertResponseContentFromText(responseText);
   }
 }

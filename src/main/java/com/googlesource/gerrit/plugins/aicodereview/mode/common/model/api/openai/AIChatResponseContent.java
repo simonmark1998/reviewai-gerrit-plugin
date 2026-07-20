@@ -16,13 +16,16 @@ package com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.opena
 
 import java.util.List;
 import lombok.Data;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import lombok.NoArgsConstructor;
 
 @Data
-@RequiredArgsConstructor
+@NoArgsConstructor
 public class AIChatResponseContent {
   private List<AIChatReplyItem> replies;
   private String changeId;
-  @NonNull private String messageContent;
+  private String messageContent;
+
+  public AIChatResponseContent(String messageContent) {
+    this.messageContent = messageContent;
+  }
 }

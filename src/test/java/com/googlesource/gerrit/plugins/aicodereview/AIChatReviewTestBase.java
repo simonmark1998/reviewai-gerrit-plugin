@@ -267,7 +267,7 @@ public class AIChatReviewTestBase extends AIChatTestBase {
 
   protected String readTestFile(String filename) {
     try {
-      return new String(Files.readAllBytes(basePath.resolve(filename)));
+      return new String(Files.readAllBytes(basePath.resolve(filename))).replace("\r\n", "\n");
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

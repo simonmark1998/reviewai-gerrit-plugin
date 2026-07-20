@@ -170,7 +170,7 @@ public class AIChatClientStateless extends AIChatClient implements ChatAIClient 
     if (outputText == null || outputText.isEmpty()) {
       throw new IOException("Azure agent returned an empty response");
     }
-    return new AIChatResponseContent(outputText);
+    return convertResponseContentFromText(outputText);
   }
 
   private String createAgentConversation(String base, String content) throws Exception {

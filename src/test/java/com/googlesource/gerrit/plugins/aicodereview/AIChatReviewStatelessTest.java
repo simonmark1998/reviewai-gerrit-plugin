@@ -238,6 +238,37 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
+  public void patchSetCreatedJsonMessageContentIsParsedIntoInlineComments() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseJsonContent.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ArgumentCaptor<ReviewInput> captor = testRequestSent();
+
+    ReviewInput expectedReview =
+        readTestFileToClass(
+            "__files/stateless/gerritPatchSetReviewJsonContent.json", ReviewInput.class);
+    Gson gson = OutputFormat.JSON_COMPACT.newGson();
+    Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
+  @Test
   public void patchSetDisableUserGroup() {
     when(globalConfig.getString(Mockito.eq("disabledGroups"), Mockito.anyString()))
         .thenReturn(GERRIT_USER_GROUP);

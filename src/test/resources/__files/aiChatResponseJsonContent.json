@@ -1,0 +1,11 @@
+{
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"replies\":[{\"reply\":\"Token comment from content JSON.\",\"score\":-1,\"filename\":\"test_file.py\",\"lineNumber\":21,\"codeSnippet\":\"loaded_module = importclass(module_name, fromlist=[class_name])\",\"codeToken\":\"importclass\"}]}"
+      }
+    }
+  ]
+}

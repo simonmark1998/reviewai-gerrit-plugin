@@ -1,64 +1,145 @@
-
-console.log("window.Gerrit =", window.Gerrit);
-console.log("Gerrit =", typeof Gerrit);
-
 Gerrit.install(plugin => {
-  console.error('[AI Code Review] Plugin JS loaded');
+  const LABEL = "AI Review";
+  const WORKING_LABEL = "AI Review...";
+  const CHANGE_ACTION_TYPE = "change";
+  const FALLBACK_BUTTON_SELECTOR = "[data-ai-code-review-button]";
 
-  plugin.hook('change-view-integration').onAttached(hookEl => {
-    console.error('[AI Code Review] Hook attached');
+  let currentChange = null;
+  let actionKey = null;
+  let actionRegistered = false;
+  let fallbackRegistered = false;
 
-    const btn = document.createElement('button');
-    btn.textContent = 'AI Review';
-    btn.style.cssText = [
-      'display:inline-block',
-      'margin:8px 0',
-      'padding:8px 20px',
-      'background:#1976d2',
-      'color:#fff',
-      'border:none',
-      'border-radius:4px',
-      'font-size:14px',
-      'font-family:inherit',
-      'cursor:pointer',
-      'font-weight:500',
-    ].join(';');
+  plugin.on("showchange", change => {
+    currentChange = change;
+    registerChangeAction();
+  });
 
-    btn.onmouseover = () => (btn.style.background = '#1565c0');
-    btn.onmouseout = () => (btn.style.background = '#1976d2');
+  function registerChangeAction() {
+    if (actionRegistered) {
+      return;
+    }
 
-    btn.onclick = () => {
-      const match = window.location.pathname.match(/\/\+\/(\d+)/);
-      if (!match) {
-        console.error('[AI Code Review] Cannot find change number in URL');
+    const actions =
+      typeof plugin.changeActions === "function" ? plugin.changeActions() : null;
+    if (!actions || typeof actions.add !== "function") {
+      registerFallbackButton();
+      return;
+    }
+
+    try {
+      actionKey = actions.add(CHANGE_ACTION_TYPE, LABEL);
+      if (!actionKey) {
+        throw new Error("changeActions.add did not return an action key");
+      }
+      actionRegistered = true;
+
+      safeCall(actions, "setTitle", actionKey, "Trigger an AI code review for this change.");
+      safeCall(actions, "addTapListener", actionKey, event => {
+        if (event) {
+          if (typeof event.preventDefault === "function") {
+            event.preventDefault();
+          }
+          if (typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        }
+        triggerReview(working => setActionWorking(actions, actionKey, working));
+      });
+    } catch (error) {
+      console.warn("AI review change action could not be registered", error);
+      registerFallbackButton();
+    }
+  }
+
+  function registerFallbackButton() {
+    if (fallbackRegistered || typeof plugin.hook !== "function") {
+      return;
+    }
+    fallbackRegistered = true;
+
+    plugin.hook("change-view-integration").onAttached(hookEl => {
+      if (!hookEl || hookEl.querySelector(FALLBACK_BUTTON_SELECTOR)) {
         return;
       }
 
-      const changeNum = match[1];
-      btn.disabled = true;
-      btn.textContent = 'Reviewing...';
-      btn.style.background = '#90a4ae';
+      const button = document.createElement("button");
+      button.dataset.aiCodeReviewButton = "true";
+      button.type = "button";
+      button.textContent = LABEL;
+      button.title = "Trigger an AI code review for this change.";
+      button.style.cssText = [
+        "display:inline-block",
+        "margin:8px 0",
+        "padding:6px 16px",
+        "background:#1976d2",
+        "color:#fff",
+        "border:0",
+        "border-radius:4px",
+        "font:inherit",
+        "cursor:pointer",
+      ].join(";");
+      button.addEventListener("click", () => {
+        triggerReview(working => setFallbackWorking(button, working));
+      });
 
-      plugin.restApi()
-        .post('/changes/' + changeNum + '/ai-review', {})
-        .then(() => {
-          console.log('[AI Code Review] Review triggered for change', changeNum);
-          btn.textContent = 'Review Started';
-          btn.style.background = '#388e3c';
-          setTimeout(() => {
-            btn.textContent = 'AI Review';
-            btn.style.background = '#1976d2';
-            btn.disabled = false;
-          }, 4000);
-        })
-        .catch(err => {
-          console.error('[AI Code Review] Error:', err);
-          btn.textContent = 'AI Review (failed)';
-          btn.style.background = '#d32f2f';
-          btn.disabled = false;
-        });
-    };
+      hookEl.appendChild(button);
+    });
+  }
 
-    hookEl.appendChild(btn);
-  });
+  async function triggerReview(setWorking) {
+    const changeNumber = getChangeNumber();
+    if (!changeNumber) {
+      notify("AI review could not determine the current change.");
+      return;
+    }
+
+    setWorking(true);
+    try {
+      await plugin.restApi().post(`/changes/${encodeURIComponent(changeNumber)}/ai-review`, {
+        trigger: "manual",
+      });
+      notify("AI review started.");
+    } catch (error) {
+      console.error("AI review failed", error);
+      notify(`AI review failed: ${error.message || error}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function getChangeNumber() {
+    if (currentChange && currentChange._number) {
+      return currentChange._number;
+    }
+
+    const locationText = `${window.location.pathname}${window.location.hash}`;
+    const match = locationText.match(/\/c\/.*\/\+\/(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  function setActionWorking(actions, key, working) {
+    safeCall(actions, "setEnabled", key, !working);
+    safeCall(actions, "setLabel", key, working ? WORKING_LABEL : LABEL);
+  }
+
+  function setFallbackWorking(button, working) {
+    button.disabled = working;
+    button.textContent = working ? WORKING_LABEL : LABEL;
+    button.style.cursor = working ? "wait" : "pointer";
+  }
+
+  function safeCall(object, method, ...args) {
+    if (object && typeof object[method] === "function") {
+      object[method](...args);
+    }
+  }
+
+  function notify(message) {
+    document.dispatchEvent(
+        new CustomEvent("show-alert", {
+          detail: {message},
+          composed: true,
+          bubbles: true,
+        }));
+  }
 });

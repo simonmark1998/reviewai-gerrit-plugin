@@ -14,6 +14,13 @@
 
 package com.googlesource.gerrit.plugins.aicodereview;
 
+import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.isJsonString;
+import static com.googlesource.gerrit.plugins.aicodereview.utils.JsonTextUtils.unwrapJsonCode;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
@@ -130,12 +137,22 @@ public class PatchSetReviewer {
   }
 
   private void retrieveReviewBatches(AIChatResponseContent reviewReply, GerritChange change) {
-    if (reviewReply.getMessageContent() != null && !reviewReply.getMessageContent().isEmpty()) {
+    if ((reviewReply.getReplies() == null || reviewReply.getReplies().isEmpty())
+        && reviewReply.getMessageContent() != null
+        && !reviewReply.getMessageContent().isEmpty()) {
       reviewBatches.add(new ReviewBatch(reviewReply.getMessageContent()));
       return;
     }
+    if (reviewReply.getReplies() == null) {
+      log.warn("AIChat response contains no replies and no message content");
+      return;
+    }
     for (AIChatReplyItem replyItem : reviewReply.getReplies()) {
-      String reply = replyItem.getReply();
+      String reply = getReplyText(replyItem);
+      if (reply.isBlank()) {
+        log.warn("AIChat reply text is empty for reply item {}", replyItem);
+        continue;
+      }
       Integer score = replyItem.getScore();
       boolean isNotNegative = isNotNegativeReply(score);
       boolean isIrrelevant = isIrrelevantReply(replyItem);
@@ -159,6 +176,29 @@ public class PatchSetReviewer {
       }
       reviewBatches.add(batchMap);
     }
+  }
+
+  private String getReplyText(AIChatReplyItem replyItem) {
+    String reply = replyItem.getReply();
+    if (reply == null) {
+      return "";
+    }
+    String trimmed = reply.trim();
+    if (!isJsonString(trimmed)) {
+      return reply;
+    }
+    try {
+      JsonElement parsed = JsonParser.parseString(unwrapJsonCode(trimmed));
+      if (parsed.isJsonObject()) {
+        JsonObject object = parsed.getAsJsonObject();
+        if (object.has("reply") && object.get("reply").isJsonPrimitive()) {
+          return object.get("reply").getAsString();
+        }
+      }
+    } catch (JsonSyntaxException e) {
+      log.warn("AIChat reply looked like JSON but could not be parsed", e);
+    }
+    return reply;
   }
 
   private AIChatResponseContent getReviewReply(GerritChange change, String patchSet)

@@ -22,6 +22,7 @@ import lombok.Data;
 public class AIChatResponseMessage {
   private String role;
   private String type;
+  private String content;
 
   @SerializedName("tool_calls")
   private List<AIChatToolCall> toolCalls;
