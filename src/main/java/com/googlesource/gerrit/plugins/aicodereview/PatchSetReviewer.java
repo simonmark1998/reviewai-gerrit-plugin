@@ -215,7 +215,7 @@ public class PatchSetReviewer {
   private Integer getReviewScore(GerritChange change) {
     if (config.isVotingEnabled()) {
       return reviewScores.isEmpty()
-          ? (change.getIsCommentEvent() ? null : 0)
+          ? (change.getIsCommentEvent() || reviewBatches.isEmpty() ? null : 0)
           : Collections.min(reviewScores);
     } else {
       return null;

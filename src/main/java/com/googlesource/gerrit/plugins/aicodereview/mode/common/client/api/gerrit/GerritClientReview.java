@@ -67,7 +67,9 @@ public class GerritClientReview extends GerritClientAccount {
       Integer reviewScore)
       throws Exception {
     ReviewInput reviewInput = buildReview(reviewBatches, changeSetData, reviewScore);
-    if (reviewInput.comments == null && reviewInput.message == null) {
+    if (reviewInput.comments == null
+        && reviewInput.message == null
+        && (reviewInput.labels == null || reviewInput.labels.isEmpty())) {
       return;
     }
     try (ManualRequestContext requestContext = config.openRequestContext()) {

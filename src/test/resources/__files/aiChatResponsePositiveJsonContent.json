@@ -1,0 +1,9 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "{\"replies\":[{\"reply\":\"The change looks good.\",\"score\":1,\"filename\":\"test_file.py\",\"lineNumber\":21,\"codeSnippet\":\"loaded_module = importclass(module_name, fromlist=[class_name])\",\"codeToken\":\"importclass\"}]}"
+      }
+    }
+  ]
+}

@@ -332,6 +332,34 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
+  public void patchSetCreatedPositiveJsonMessageContentSendsLabelOnlyVote() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponsePositiveJsonContent.json")));
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
+    Assert.assertNull(reviewInput.comments);
+    Assert.assertNull(reviewInput.message);
+    Assert.assertEquals(Short.valueOf((short) 1), reviewInput.labels.get("Code-Review"));
+  }
+
+  @Test
   public void patchSetCreatedUnexpectedJsonMessageContentIsNotPostedRaw() throws Exception {
     when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
         .thenReturn(false);
