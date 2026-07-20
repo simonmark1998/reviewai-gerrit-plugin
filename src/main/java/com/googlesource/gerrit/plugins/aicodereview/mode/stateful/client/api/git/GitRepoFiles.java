@@ -42,10 +42,7 @@ import org.eclipse.jgit.treewalk.filter.TreeFilter;
 public class GitRepoFiles {
   public static final String REPO_PATTERN = "git/%s.git";
 
-  private List<String> enabledFileExtensions;
-
   public String getGitRepoFiles(Configuration config, GerritChange change) {
-    enabledFileExtensions = config.getEnabledFileExtensions();
     log.debug("Open Repo from {}", change.getProjectNameKey());
     String repoPath = String.format(REPO_PATTERN, change.getProjectNameKey().toString());
     try {
@@ -75,7 +72,6 @@ public class GitRepoFiles {
 
         while (treeWalk.next()) {
           String path = treeWalk.getPathString();
-          if (!matchesExtensionList(path, enabledFileExtensions)) continue;
           ObjectId objectId = treeWalk.getObjectId(0);
           byte[] bytes = reader.open(objectId).getBytes();
           String content =

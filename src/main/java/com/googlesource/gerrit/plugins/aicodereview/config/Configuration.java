@@ -127,7 +127,6 @@ public class Configuration {
   private static final String KEY_ENABLED_PROJECTS = "enabledProjects";
   private static final String KEY_MAX_REVIEW_LINES = "maxReviewLines";
   private static final String KEY_MAX_REVIEW_FILE_SIZE = "maxReviewFileSize";
-  private static final String KEY_ENABLED_FILE_EXTENSIONS = "enabledFileExtensions";
   private static final String KEY_ENABLED_VOTING = "enabledVoting";
   private static final String KEY_FILTER_NEGATIVE_COMMENTS = "filterNegativeComments";
   private static final String KEY_FILTER_COMMENTS_BELOW_SCORE = "filterCommentsBelowScore";
@@ -312,11 +311,6 @@ public class Configuration {
 
   public int getMaxReviewFileSize() {
     return getInt(KEY_MAX_REVIEW_FILE_SIZE, DEFAULT_MAX_REVIEW_FILE_SIZE);
-  }
-
-  public List<String> getEnabledFileExtensions() {
-    return splitConfig(
-        globalConfig.getString(KEY_ENABLED_FILE_EXTENSIONS, DEFAULT_ENABLED_FILE_EXTENSIONS));
   }
 
   public boolean isVotingEnabled() {

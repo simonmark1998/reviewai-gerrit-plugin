@@ -79,27 +79,57 @@ public class GerritClientPatchSet extends GerritClientAccount {
 
   protected void retrieveFileDiff(GerritChange change, List<String> files, int revisionBase)
       throws Exception {
-    List<String> enabledFileExtensions = config.getEnabledFileExtensions();
     try (ManualRequestContext requestContext = config.openRequestContext()) {
-      for (String filename : files) {
-        isCommitMessage = filename.equals("/COMMIT_MSG");
-        if (!isCommitMessage && !matchesExtensionList(filename, enabledFileExtensions)) {
-          continue;
+        try {
+          DiffInfo diff =
+              config
+                  .getGerritApi()
+                  .changes()
+                  .id(
+                      change.getProjectName(),
+                      change.getBranchNameKey().shortName(),
+                      change.getChangeKey().get())
+                  .current()
+                  .file(filename)
+                  .diff(revisionBase);
+          if (!isReviewableDiff(change, filename, diff)) {
+            continue;
+          }
+          processFileDiff(change, filename, diff);
+        } catch (Exception e) {
+          log.warn(
+              "File '{}' not reviewed because Gerrit diff retrieval failed for change {}",
+              filename,
+              change.getFullChangeId(),
+              e);
         }
-        DiffInfo diff =
-            config
-                .getGerritApi()
-                .changes()
-                .id(
-                    change.getProjectName(),
-                    change.getBranchNameKey().shortName(),
-                    change.getChangeKey().get())
-                .current()
-                .file(filename)
-                .diff(revisionBase);
-        processFileDiff(change, filename, diff);
       }
     }
+  }
+
+  private boolean isReviewableDiff(GerritChange change, String filename, DiffInfo diff) {
+    if (diff == null) {
+      log.info(
+          "File '{}' not reviewed because Gerrit returned an empty diff for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    if (Boolean.TRUE.equals(diff.binary)) {
+      log.info(
+          "File '{}' not reviewed because Gerrit marked it as binary for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    if (diff.content == null || diff.content.isEmpty()) {
+      log.info(
+          "File '{}' not reviewed because Gerrit returned no text diff content for change {}",
+          filename,
+          change.getFullChangeId());
+      return false;
+    }
+    return true;
   }
 
   private boolean isChangeSetBased(ChangeSetData changeSetData) {
