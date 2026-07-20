@@ -15,6 +15,7 @@
 package com.googlesource.gerrit.plugins.aicodereview;
 
 import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.KEY_AI_CHAT_ENDPOINT;
+import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.KEY_AI_DOMAIN;
 import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.KEY_AI_TYPE;
 import static com.googlesource.gerrit.plugins.aicodereview.config.Configuration.KEY_STREAM_OUTPUT;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.TextUtils.joinWithNewLine;
@@ -150,6 +151,34 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
             promptTagReview));
   }
 
+  private void mockAzureAgentResponse(String responseBodyFile) {
+    when(globalConfig.getString(Mockito.eq(KEY_AI_TYPE), Mockito.anyString()))
+        .thenReturn("AZUREAGENT");
+    when(globalConfig.getString(KEY_AI_DOMAIN)).thenReturn(GPT_DOMAIN);
+    when(globalConfig.getString(Mockito.eq(KEY_AI_CHAT_ENDPOINT), Mockito.anyString()))
+        .thenReturn("/api/projects/test/openai/v1");
+    WireMock.stubFor(
+        WireMock.post(WireMock.urlEqualTo("/api/projects/test/openai/v1/conversations"))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("agentConversationResponse.json")));
+    WireMock.stubFor(
+        WireMock.post(WireMock.urlEqualTo("/api/projects/test/openai/v1/responses"))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile(responseBodyFile)));
+  }
+
+  private ReviewInput getSentReviewInput() throws RestApiException {
+    ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
+    verify(revisionApiMock).review(reviewInputCaptor.capture());
+    return reviewInputCaptor.getValue();
+  }
+
   @Test
   public void patchSetCreatedOrUpdatedStreamed() throws Exception {
     String reviewUserPrompt = getReviewUserPrompt();
@@ -268,6 +297,41 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
             "__files/stateless/gerritPatchSetReviewJsonContent.json", ReviewInput.class);
     Gson gson = OutputFormat.JSON_COMPACT.newGson();
     Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
+  @Test
+  public void patchSetCreatedAzureAgentNestedTextValueIsParsedIntoInlineComments()
+      throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+    mockAzureAgentResponse("agentResponseNestedTextValueJson.json");
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = getSentReviewInput();
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Agent inline comment from nested text value.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertEquals(20, comment.range.startCharacter);
+    Assert.assertEquals(31, comment.range.endCharacter);
+    Assert.assertEquals(Short.valueOf((short) -1), reviewInput.labels.get("Code-Review"));
+  }
+
+  @Test
+  public void patchSetCreatedAzureAgentFallsBackToLineCommentWhenSnippetDoesNotMatch()
+      throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("enabledVoting"), Mockito.anyBoolean()))
+        .thenReturn(true);
+    mockAzureAgentResponse("agentResponseLineOnlyJson.json");
+
+    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    ReviewInput reviewInput = getSentReviewInput();
+    ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
+    Assert.assertEquals("Agent line comment without an exact snippet match.", comment.message);
+    Assert.assertEquals(Integer.valueOf(21), comment.line);
+    Assert.assertNull(comment.range);
+    Assert.assertEquals(Short.valueOf((short) -1), reviewInput.labels.get("Code-Review"));
   }
 
   @Test

@@ -38,25 +38,57 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public abstract class AIChatClient extends ClientBase {
+  private static final Pattern JSON_CODE_BLOCK =
+      Pattern.compile("```(?:json)?\\s*(\\{.*?\\}|\\[.*?\\])\\s*```", Pattern.DOTALL);
+  private static final Pattern JSON_REPLIES_BLOCK =
+      Pattern.compile(
+          "(\\{\\s*\"(?:replies|comments|inlineComments|inline_comments)\"\\s*:.*\\})",
+          Pattern.DOTALL);
+
   private static final List<String> RESPONSE_ARRAY_KEYS =
-      Arrays.asList("replies", "comments", "reviews", "findings", "issues", "suggestions");
+      Arrays.asList(
+          "replies",
+          "comments",
+          "inlineComments",
+          "inline_comments",
+          "reviewComments",
+          "review_comments",
+          "reviews",
+          "findings",
+          "issues",
+          "suggestions");
   private static final List<String> RESPONSE_TEXT_KEYS =
-      Arrays.asList("response", "content", "message", "text", "output_text");
+      Arrays.asList("response", "content", "message", "text", "output_text", "value");
   private static final List<String> REPLY_TEXT_KEYS =
-      Arrays.asList("reply", "comment", "message", "text", "body", "content");
+      Arrays.asList(
+          "reply",
+          "comment",
+          "message",
+          "text",
+          "body",
+          "content",
+          "feedback",
+          "description",
+          "suggestion",
+          "reviewComment",
+          "review_comment");
   private static final List<String> FILENAME_KEYS =
-      Arrays.asList("filename", "file", "fileName", "path");
+      Arrays.asList("filename", "file", "fileName", "file_name", "filePath", "file_path", "path");
   private static final List<String> LINE_NUMBER_KEYS =
-      Arrays.asList("lineNumber", "line", "line_number");
+      Arrays.asList("lineNumber", "line", "line_number", "lineNo", "line_no");
   private static final List<String> CODE_SNIPPET_KEYS =
-      Arrays.asList("codeSnippet", "snippet", "code", "code_snippet");
+      Arrays.asList("codeSnippet", "snippet", "code", "code_snippet", "excerpt");
   private static final List<String> CODE_TOKEN_KEYS =
       Arrays.asList("codeToken", "token", "identifier", "symbol", "code_token");
+  private static final List<String> SCORE_KEYS =
+      Arrays.asList("score", "vote", "rating", "codeReview", "code_review", "label");
 
   protected boolean isCommentEvent = false;
   @Getter protected String requestBody;
@@ -144,7 +176,37 @@ public abstract class AIChatClient extends ClientBase {
         return new AIChatResponseContent();
       }
     }
+    Optional<AIChatResponseContent> embeddedJsonContent = convertEmbeddedJsonContent(trimmed);
+    if (embeddedJsonContent.isPresent()) {
+      return embeddedJsonContent.get();
+    }
     return new AIChatResponseContent(content);
+  }
+
+  protected Optional<AIChatResponseContent> convertEmbeddedJsonContent(String content) {
+    Optional<AIChatResponseContent> codeBlockContent =
+        convertFirstMatchingJson(content, JSON_CODE_BLOCK);
+    if (codeBlockContent.isPresent()) {
+      return codeBlockContent;
+    }
+    return convertFirstMatchingJson(content, JSON_REPLIES_BLOCK);
+  }
+
+  private Optional<AIChatResponseContent> convertFirstMatchingJson(
+      String content, Pattern pattern) {
+    Matcher matcher = pattern.matcher(content);
+    while (matcher.find()) {
+      try {
+        Optional<AIChatResponseContent> responseContent =
+            toOptionalContent(convertResponseContentFromJson(matcher.group(1)));
+        if (responseContent.isPresent()) {
+          return responseContent;
+        }
+      } catch (JsonSyntaxException e) {
+        log.warn("Embedded AIChat JSON block could not be parsed", e);
+      }
+    }
+    return Optional.empty();
   }
 
   private AIChatResponseContent convertResponseContentFromJson(String content) {
@@ -183,12 +245,15 @@ public abstract class AIChatClient extends ClientBase {
     }
     JsonElement element = object.get(key);
     if (element.isJsonArray()) {
-      return Optional.of(convertReplyArray(element.getAsJsonArray(), object));
+      return toOptionalContent(convertReplyArray(element.getAsJsonArray(), object));
     }
     if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
-      return Optional.of(convertResponseContentFromText(element.getAsString()));
+      return toOptionalContent(convertResponseContentFromText(element.getAsString()));
     }
-    return Optional.of(new AIChatResponseContent());
+    if (element.isJsonObject()) {
+      return toOptionalContent(convertReplyObjectMap(element.getAsJsonObject(), object));
+    }
+    return Optional.empty();
   }
 
   private AIChatResponseContent convertReplyArray(JsonArray array) {
@@ -198,15 +263,60 @@ public abstract class AIChatClient extends ClientBase {
   private AIChatResponseContent convertReplyArray(JsonArray array, JsonObject sourceObject) {
     AIChatResponseContent responseContent = new AIChatResponseContent();
     List<AIChatReplyItem> replies = new ArrayList<>();
+    Optional<Integer> sourceScore =
+        sourceObject == null ? Optional.empty() : getIntegerProperty(sourceObject, SCORE_KEYS);
     for (JsonElement element : array) {
       Optional<AIChatReplyItem> replyItem = convertReplyElement(element);
-      replyItem.ifPresent(replies::add);
+      replyItem.ifPresent(
+          item -> {
+            sourceScore.ifPresent(score -> setScoreIfMissing(item, score));
+            replies.add(item);
+          });
     }
     responseContent.setReplies(replies);
     if (sourceObject != null) {
       getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
     }
     return responseContent;
+  }
+
+  private AIChatResponseContent convertReplyObjectMap(
+      JsonObject commentsByFile, JsonObject sourceObject) {
+    AIChatResponseContent responseContent = new AIChatResponseContent();
+    List<AIChatReplyItem> replies = new ArrayList<>();
+    Optional<Integer> sourceScore =
+        sourceObject == null ? Optional.empty() : getIntegerProperty(sourceObject, SCORE_KEYS);
+    for (String filename : commentsByFile.keySet()) {
+      JsonElement element = commentsByFile.get(filename);
+      if (element.isJsonArray()) {
+        for (JsonElement itemElement : element.getAsJsonArray()) {
+          addMappedReply(replies, itemElement, filename, sourceScore);
+        }
+      } else {
+        addMappedReply(replies, element, filename, sourceScore);
+      }
+    }
+    responseContent.setReplies(replies);
+    if (sourceObject != null) {
+      getStringProperty(sourceObject, "changeId").ifPresent(responseContent::setChangeId);
+    }
+    return responseContent;
+  }
+
+  private void addMappedReply(
+      List<AIChatReplyItem> replies,
+      JsonElement element,
+      String filename,
+      Optional<Integer> sourceScore) {
+    Optional<AIChatReplyItem> replyItem = convertReplyElement(element);
+    replyItem.ifPresent(
+        item -> {
+          if (item.getFilename() == null && looksLikeFilename(filename)) {
+            item.setFilename(filename);
+          }
+          sourceScore.ifPresent(score -> setScoreIfMissing(item, score));
+          replies.add(item);
+        });
   }
 
   private AIChatResponseContent convertSingleReply(
@@ -248,7 +358,31 @@ public abstract class AIChatClient extends ClientBase {
     if (replyItem.getCodeToken() == null) {
       getStringProperty(object, CODE_TOKEN_KEYS).ifPresent(replyItem::setCodeToken);
     }
+    if (replyItem.getScore() == null) {
+      getIntegerProperty(object, SCORE_KEYS).ifPresent(replyItem::setScore);
+    }
     return replyItem.getReply() == null ? Optional.empty() : Optional.of(replyItem);
+  }
+
+  private Optional<AIChatResponseContent> toOptionalContent(AIChatResponseContent responseContent) {
+    if (responseContent.getReplies() != null && !responseContent.getReplies().isEmpty()) {
+      return Optional.of(responseContent);
+    }
+    if (responseContent.getMessageContent() != null
+        && !responseContent.getMessageContent().isEmpty()) {
+      return Optional.of(responseContent);
+    }
+    return Optional.empty();
+  }
+
+  private void setScoreIfMissing(AIChatReplyItem replyItem, Integer score) {
+    if (replyItem.getScore() == null) {
+      replyItem.setScore(score);
+    }
+  }
+
+  private boolean looksLikeFilename(String value) {
+    return value.contains("/") || value.contains("\\") || value.contains(".");
   }
 
   private Optional<String> getStringProperty(JsonObject object, List<String> keys) {

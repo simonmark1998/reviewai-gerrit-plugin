@@ -133,6 +133,9 @@ public class PatchSetReviewer {
       batchMap.setFilename(replyItem.getFilename());
       batchMap.setLine(gerritCodeRange.getStartLine());
       batchMap.setRange(gerritCodeRange);
+    } else if (replyItem.getFilename() != null && replyItem.getLineNumber() != null) {
+      batchMap.setFilename(replyItem.getFilename());
+      batchMap.setLine(replyItem.getLineNumber());
     }
   }
 

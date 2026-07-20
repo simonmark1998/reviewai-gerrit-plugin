@@ -19,6 +19,10 @@ import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getNo
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.net.HttpHeaders;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
@@ -35,10 +39,7 @@ import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentConversationRequest;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentConversationResponse;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentMessageItem;
-import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentOutputContent;
-import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentOutputItem;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentReference;
-import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentResponse;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.agent.AgentResponseRequest;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.aicodereview.mode.stateless.client.api.UriResourceLocatorStateless;
@@ -48,8 +49,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.NameValuePair;
 import org.apache.http.entity.ContentType;
@@ -218,28 +221,141 @@ public class AIChatClientStateless extends AIChatClient implements ChatAIClient 
   }
 
   private String extractAgentOutputText(String body) {
-    AgentResponse response = getGson().fromJson(body, AgentResponse.class);
-    if (response == null) {
-      return null;
+    JsonElement response = JsonParser.parseString(body);
+    Optional<String> outputText = getObjectString(response, "output_text");
+    if (outputText.isPresent()) {
+      return outputText.get();
     }
-    if (response.getOutputText() != null && !response.getOutputText().isEmpty()) {
-      return response.getOutputText();
+
+    Optional<String> embeddedReviewJson = findEmbeddedReviewJson(response);
+    if (embeddedReviewJson.isPresent()) {
+      return embeddedReviewJson.get();
     }
-    if (response.getOutput() == null) {
-      return null;
+
+    List<String> textParts = new ArrayList<>();
+    if (response.isJsonObject() && response.getAsJsonObject().has("output")) {
+      collectOutputText(response.getAsJsonObject().get("output"), textParts);
     }
-    StringBuilder builder = new StringBuilder();
-    for (AgentOutputItem item : response.getOutput()) {
-      if (item.getContent() == null) {
-        continue;
+    if (textParts.isEmpty()) {
+      collectTypedText(response, textParts);
+    }
+    return textParts.isEmpty() ? null : String.join("\n", textParts);
+  }
+
+  private void collectOutputText(JsonElement element, List<String> textParts) {
+    if (element == null || element.isJsonNull()) {
+      return;
+    }
+    if (element.isJsonArray()) {
+      for (JsonElement item : element.getAsJsonArray()) {
+        collectOutputText(item, textParts);
       }
-      for (AgentOutputContent outputContent : item.getContent()) {
-        if ("output_text".equals(outputContent.getType()) && outputContent.getText() != null) {
-          builder.append(outputContent.getText());
+      return;
+    }
+    if (!element.isJsonObject()) {
+      return;
+    }
+    JsonObject object = element.getAsJsonObject();
+    if (object.has("content")) {
+      collectTypedText(object.get("content"), textParts);
+    }
+    getTextValue(object.get("text")).ifPresent(textParts::add);
+    getTextValue(object.get("output_text")).ifPresent(textParts::add);
+  }
+
+  private void collectTypedText(JsonElement element, List<String> textParts) {
+    if (element == null || element.isJsonNull()) {
+      return;
+    }
+    if (element.isJsonArray()) {
+      for (JsonElement item : element.getAsJsonArray()) {
+        collectTypedText(item, textParts);
+      }
+      return;
+    }
+    if (!element.isJsonObject()) {
+      return;
+    }
+    JsonObject object = element.getAsJsonObject();
+    String type = getObjectString(object, "type").orElse("");
+    if ("output_text".equals(type) || "text".equals(type) || "message".equals(type)) {
+      getTextValue(object.get("text")).ifPresent(textParts::add);
+      getTextValue(object.get("output_text")).ifPresent(textParts::add);
+      getTextValue(object.get("content")).ifPresent(textParts::add);
+    }
+    if (object.has("content")) {
+      collectTypedText(object.get("content"), textParts);
+    }
+  }
+
+  private Optional<String> findEmbeddedReviewJson(JsonElement element) {
+    if (element == null || element.isJsonNull()) {
+      return Optional.empty();
+    }
+    if (element.isJsonObject()) {
+      JsonObject object = element.getAsJsonObject();
+      if (object.has("replies") || object.has("comments") || object.has("inlineComments")) {
+        return Optional.of(getNoEscapedGson().toJson(object));
+      }
+      for (String key : object.keySet()) {
+        Optional<String> result = findEmbeddedReviewJson(object.get(key));
+        if (result.isPresent()) {
+          return result;
         }
       }
+    } else if (element.isJsonArray()) {
+      JsonArray array = element.getAsJsonArray();
+      for (JsonElement item : array) {
+        Optional<String> result = findEmbeddedReviewJson(item);
+        if (result.isPresent()) {
+          return result;
+        }
+      }
+    } else if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+      String text = element.getAsString();
+      if (convertEmbeddedJsonContent(text).isPresent()) {
+        return Optional.of(text);
+      }
     }
-    return builder.toString();
+    return Optional.empty();
+  }
+
+  private Optional<String> getTextValue(JsonElement element) {
+    if (element == null || element.isJsonNull()) {
+      return Optional.empty();
+    }
+    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+      String value = element.getAsString();
+      return value.isEmpty() ? Optional.empty() : Optional.of(value);
+    }
+    if (element.isJsonObject()) {
+      JsonObject object = element.getAsJsonObject();
+      Optional<String> value = getObjectString(object, "value");
+      if (value.isPresent()) {
+        return value;
+      }
+      return getObjectString(object, "text");
+    }
+    return Optional.empty();
+  }
+
+  private Optional<String> getObjectString(JsonElement element, String key) {
+    if (element == null || !element.isJsonObject()) {
+      return Optional.empty();
+    }
+    return getObjectString(element.getAsJsonObject(), key);
+  }
+
+  private Optional<String> getObjectString(JsonObject object, String key) {
+    if (!object.has(key)) {
+      return Optional.empty();
+    }
+    JsonElement value = object.get(key);
+    if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+      return Optional.empty();
+    }
+    String text = value.getAsString();
+    return text.isEmpty() ? Optional.empty() : Optional.of(text);
   }
 
   private HttpRequest buildAgentPost(String uri, String body) {
