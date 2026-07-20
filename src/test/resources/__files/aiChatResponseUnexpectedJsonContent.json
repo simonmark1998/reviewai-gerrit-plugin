@@ -1,0 +1,9 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "{\"unexpected\":\"this raw JSON must not be posted as a Gerrit review comment\"}"
+      }
+    }
+  ]
+}

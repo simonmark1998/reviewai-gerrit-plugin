@@ -198,7 +198,7 @@ public class PatchSetReviewer {
     } catch (JsonSyntaxException e) {
       log.warn("AIChat reply looked like JSON but could not be parsed", e);
     }
-    return reply;
+    return "";
   }
 
   private AIChatResponseContent getReviewReply(GerritChange change, String patchSet)

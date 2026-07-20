@@ -123,7 +123,8 @@ public abstract class AIChatClient extends ClientBase {
       try {
         return convertResponseContentFromJson(unwrapJsonCode(trimmed));
       } catch (JsonSyntaxException e) {
-        log.warn("AIChat message content looked like JSON but could not be parsed", e);
+        log.warn("AIChat message content looked like JSON but could not be parsed. Skipping.", e);
+        return new AIChatResponseContent();
       }
     }
     return new AIChatResponseContent(content);
@@ -132,7 +133,8 @@ public abstract class AIChatClient extends ClientBase {
   private AIChatResponseContent convertResponseContentFromJson(String content) {
     JsonElement parsed = JsonParser.parseString(content);
     if (!parsed.isJsonObject()) {
-      return new AIChatResponseContent(content);
+      log.warn("AIChat JSON response was not an object. Skipping.");
+      return new AIChatResponseContent();
     }
     JsonObject object = parsed.getAsJsonObject();
     if (object.has("replies")) {
@@ -145,7 +147,8 @@ public abstract class AIChatClient extends ClientBase {
       responseContent.setReplies(replies);
       return responseContent;
     }
-    return new AIChatResponseContent(content);
+    log.warn("AIChat JSON response contained neither `replies` nor `reply`. Skipping.");
+    return new AIChatResponseContent();
   }
 
   private String getArgumentAsString(List<AIChatToolCall> toolCalls, int ind) {
