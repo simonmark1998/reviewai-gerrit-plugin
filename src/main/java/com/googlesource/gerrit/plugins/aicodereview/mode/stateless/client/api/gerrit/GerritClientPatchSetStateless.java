@@ -169,30 +169,15 @@ public class GerritClientPatchSetStateless extends GerritClientPatchSet
                   change.getChangeKey().get())
               .current()
               .files(revisionBase);
-      return files.entrySet().stream()
+      return files.keySet().stream()
           .filter(
-              fileEntry -> {
-                String filename = fileEntry.getKey();
-                FileInfo fileInfo = fileEntry.getValue();
+              filename -> {
                 if (filename.equals("/COMMIT_MSG") && !config.getAIReviewCommitMessages()) {
                   log.info("Commit message not reviewed because aiReviewCommitMessages=false");
                   return false;
                 }
-                if (Boolean.TRUE.equals(fileInfo.binary)) {
-                  log.info("File '{}' not reviewed because Gerrit marked it as binary.", filename);
-                  return false;
-                }
-                if (fileInfo.size > config.getMaxReviewFileSize()) {
-                  log.info(
-                      "File '{}' not reviewed because its size {} exceeds maxReviewFileSize {}.",
-                      filename,
-                      fileInfo.size,
-                      config.getMaxReviewFileSize());
-                  return false;
-                }
                 return true;
               })
-          .map(Map.Entry::getKey)
           .collect(toList());
     }
   }

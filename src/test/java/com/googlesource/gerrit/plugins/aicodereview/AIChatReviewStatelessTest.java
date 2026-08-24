@@ -190,7 +190,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
     String reviewUserPrompt = getReviewUserPrompt();
     AIChatPromptStateless.setCommentEvent(false);
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
     String systemPrompt = prompts.get(0).getAsJsonObject().get("content").getAsString();
@@ -224,7 +224,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseReview.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
     String userPrompt = prompts.get(1).getAsJsonObject().get("content").getAsString();
@@ -236,10 +236,8 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
   }
 
   @Test
-  public void patchSetCreatedIsSkippedWhenAutomaticPatchSetReviewIsDisabled() throws Exception {
-    when(globalConfig.getBoolean(Mockito.eq("aiReviewPatchSet"), Mockito.anyBoolean()))
-        .thenReturn(false);
-
+  public void patchSetCreatedIsSkippedEvenWhenAutomaticPatchSetReviewIsConfigured()
+      throws Exception {
     EventHandlerTask.Result result = handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
 
     Assert.assertEquals(EventHandlerTask.Result.NOT_SUPPORTED, result);
@@ -274,7 +272,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseWithCodeToken.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
 
@@ -305,7 +303,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
 
@@ -314,6 +312,55 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
             "__files/stateless/gerritPatchSetReviewJsonContent.json", ReviewInput.class);
     Gson gson = OutputFormat.JSON_COMPACT.newGson();
     Assert.assertEquals(gson.toJson(expectedReview), gson.toJson(captor.getAllValues().get(0)));
+  }
+
+  @Test
+  public void patchSetCreatedCodeBlockReplyIsSubmittedAsGerritMarkdownFence() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseCodeBlockJsonContent.json")));
+
+    handleManualPatchSetReview();
+
+    ReviewInput reviewInput = getSentReviewInput();
+    String message = reviewInput.comments.get("test_file.py").get(0).message;
+    Assert.assertTrue(
+        message.contains("\n\n```\nloaded_module = import_module(module_name)\n```\n"));
+    Assert.assertFalse(message.contains("```python"));
+  }
+
+  @Test
+  public void patchSetCreatedDuplicateExistingCommentIsNotSubmitted() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiStreamOutput"), Mockito.anyBoolean()))
+        .thenReturn(false);
+
+    AIChatPromptStateless.setCommentEvent(false);
+    WireMock.stubFor(
+        WireMock.post(
+                WireMock.urlEqualTo(
+                    URI.create(
+                            config.getAIDomain() + UriResourceLocatorStateless.chatCompletionsUri())
+                        .getPath()))
+            .willReturn(
+                WireMock.aResponse()
+                    .withStatus(HTTP_OK)
+                    .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
+                    .withBodyFile("aiChatResponseDuplicateExistingComment.json")));
+
+    Assert.assertEquals(EventHandlerTask.Result.OK, handleManualPatchSetReview());
+    Mockito.verify(revisionApiMock, Mockito.never()).review(Mockito.any(ReviewInput.class));
   }
 
   @Test
@@ -331,7 +378,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
     FileInfo newFileInfo = new FileInfo();
     newFileInfo.status = 'A';
     newFileInfo.linesInserted = 3;
-    newFileInfo.size = 80;
+    newFileInfo.size = config.getMaxReviewFileSize() + 1;
     files.put("new_file.yaml", newFileInfo);
     when(revisionApiMock.files(0)).thenReturn(files);
 
@@ -354,7 +401,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseReview.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     testRequestSent();
     String userPrompt = prompts.get(1).getAsJsonObject().get("content").getAsString();
@@ -418,7 +465,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseTopicRelatedJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     Mockito.verify(revisionApiMock, Mockito.never()).review(Mockito.any(ReviewInput.class));
     ArgumentCaptor<ReviewInput> relatedReviewInputCaptor =
@@ -454,7 +501,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         .thenReturn(true);
     mockAzureAgentResponse("agentResponseNestedTextValueJson.json");
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = getSentReviewInput();
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -472,7 +519,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         .thenReturn(true);
     mockAzureAgentResponse("agentResponseLineOnlyJson.json");
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = getSentReviewInput();
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -488,7 +535,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         .thenReturn(true);
     mockAzureAgentResponse("agentResponseBodyPathLineJson.json");
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = getSentReviewInput();
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -504,7 +551,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         .thenReturn(true);
     mockAzureAgentResponse("agentResponseNestedLocationJson.json");
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = getSentReviewInput();
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -536,7 +583,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseCommentsJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -566,7 +613,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseArrayJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -597,7 +644,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponsePositiveJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
     ReviewInput.CommentInput comment = reviewInput.comments.get("test_file.py").get(0);
@@ -626,7 +673,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
                     .withHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.toString())
                     .withBodyFile("aiChatResponseUnexpectedJsonContent.json")));
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ReviewInput reviewInput = testRequestSent().getAllValues().get(0);
     ReviewInput.CommentInput comment = reviewInput.comments.get("/PATCHSET_LEVEL").get(0);
@@ -640,9 +687,7 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
     when(globalConfig.getString(Mockito.eq("disabledGroups"), Mockito.anyString()))
         .thenReturn(GERRIT_USER_GROUP);
 
-    Assert.assertEquals(
-        EventHandlerTask.Result.NOT_SUPPORTED,
-        handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED));
+    Assert.assertEquals(EventHandlerTask.Result.NOT_SUPPORTED, handleManualPatchSetReview());
   }
 
   @Test

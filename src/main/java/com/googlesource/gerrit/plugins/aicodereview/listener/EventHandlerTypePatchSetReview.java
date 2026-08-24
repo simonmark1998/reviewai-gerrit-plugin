@@ -14,9 +14,6 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.listener;
 
-import static com.google.gerrit.extensions.client.ChangeKind.REWORK;
-
-import com.google.gerrit.extensions.client.ChangeKind;
 import com.google.gerrit.server.data.PatchSetAttribute;
 import com.googlesource.gerrit.plugins.aicodereview.PatchSetReviewer;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
@@ -73,12 +70,17 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
   }
 
   private boolean isPatchSetReviewEnabled(GerritChange change) {
-    if (!config.getAIReviewPatchSet() && !changeSetData.getForcedReview()) {
-      log.debug("Disabled automatic review function for created or updated PatchSets.");
+    if (!changeSetData.getForcedReview()) {
+      log.info(
+          "Automatic PatchSet review is disabled; ignoring patchset-created event for change {}. Use the manual AI Review trigger instead.",
+          change.getFullChangeId());
       return false;
     }
     if (!config.getAIReviewPatchSet()) {
-      log.info("Automatic PatchSet review is disabled, but forced review was requested.");
+      log.info("Automatic PatchSet review is disabled, but manual forced review was requested.");
+    } else {
+      log.debug(
+          "aiReviewPatchSet=true is ignored for automatic review; continuing only because forcedReview=true.");
     }
 
     Optional<PatchSetAttribute> patchSetAttributeOptional = change.getPatchSetAttribute();
@@ -99,19 +101,13 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
     }
 
     PatchSetAttribute patchSetAttribute = patchSetAttributeOptional.get();
-    ChangeKind patchSetEventKind = patchSetAttribute.kind;
     log.debug(
         "PatchSetAttribute retrieved: change={}, kind={}, author={}, forcedReview={}",
         change.getFullChangeId(),
-        patchSetEventKind,
+        patchSetAttribute.kind,
         patchSetAttribute.author == null ? null : patchSetAttribute.author.username,
         changeSetData.getForcedReview());
-    // The only Change kind that automatically triggers the review is REWORK. If review is forced
-    // via command, this condition is bypassed.
-    if (patchSetEventKind != REWORK && !changeSetData.getForcedReview()) {
-      log.debug("Change kind '{}' not processed", patchSetEventKind);
-      return false;
-    }
+
     String authorUsername = patchSetAttribute.author.username;
     if (gerritClient.isDisabledUser(authorUsername)) {
       log.info("Review of PatchSets from user '{}' is disabled.", authorUsername);

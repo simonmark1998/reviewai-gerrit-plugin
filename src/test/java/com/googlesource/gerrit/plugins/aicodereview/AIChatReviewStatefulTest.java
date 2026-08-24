@@ -274,7 +274,7 @@ public class AIChatReviewStatefulTest extends AIChatReviewTestBase {
     String reviewPrompt =
         chatGptPromptStateful.getDefaultGptThreadReviewMessage(formattedPatchContent);
 
-    handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+    handleManualPatchSetReview();
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
     Assert.assertEquals(reviewPrompt, requestContent);
@@ -308,7 +308,7 @@ public class AIChatReviewStatefulTest extends AIChatReviewTestBase {
       String reviewPrompt =
           chatGptPromptStateful.getDefaultGptThreadReviewMessage(formattedPatchContent);
 
-      handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+      handleManualPatchSetReview();
 
       ArgumentCaptor<ReviewInput> captor = testRequestSent();
       Assert.assertEquals(reviewPrompt, requestContent);

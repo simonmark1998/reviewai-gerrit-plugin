@@ -17,7 +17,6 @@ package com.googlesource.gerrit.plugins.aicodereview;
 import static com.google.gerrit.extensions.client.ChangeKind.REWORK;
 import static com.googlesource.gerrit.plugins.aicodereview.listener.EventHandlerTask.EVENT_CLASS_MAP;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getGson;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +45,7 @@ import com.google.gson.JsonObject;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.TypeLiteral;
+import com.google.inject.util.Modules;
 import com.google.inject.util.Providers;
 import com.googlesource.gerrit.plugins.aicodereview.config.ConfigCreator;
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
@@ -284,11 +284,17 @@ public class AIChatReviewTestBase extends AIChatTestBase {
 
     EventHandlerTask task =
         Guice.createInjector(
+                Modules.override(new TestGerritEventContextModule(config, event))
+                    .with(
+                        new AbstractModule() {
+                          @Override
+                          protected void configure() {
+                            bind(ChangeSetData.class).toInstance(changeSetData);
+                          }
+                        }),
                 new AbstractModule() {
                   @Override
                   protected void configure() {
-                    install(new TestGerritEventContextModule(config, event));
-
                     bind(GerritClient.class).toInstance(gerritClient);
                     bind(GitRepoFiles.class).toInstance(gitRepoFiles);
                     bind(ConfigCreator.class).toInstance(mockConfigCreator);
@@ -299,6 +305,11 @@ public class AIChatReviewTestBase extends AIChatTestBase {
                 })
             .getInstance(EventHandlerTask.class);
     return task.execute();
+  }
+
+  protected EventHandlerTask.Result handleManualPatchSetReview() {
+    changeSetData.setForcedReview(true);
+    return handleEventBasedOnType(EventHandlerTask.SupportedEvents.PATCH_SET_CREATED);
   }
 
   protected ArgumentCaptor<ReviewInput> testRequestSent() throws RestApiException {
@@ -389,7 +400,10 @@ public class AIChatReviewTestBase extends AIChatTestBase {
     AccountCache accountCache = mock(AccountCache.class);
     Account account = Account.builder(Account.id(GPT_USER_ACCOUNT_ID), Instant.now()).build();
     AccountState accountState = AccountState.forAccount(account, Collections.emptyList());
-    doReturn(Optional.of(accountState)).when(accountCache).getByUsername(GERRIT_GPT_USERNAME);
+    Mockito.lenient()
+        .doReturn(Optional.of(accountState))
+        .when(accountCache)
+        .getByUsername(GERRIT_GPT_USERNAME);
 
     return accountCache;
   }

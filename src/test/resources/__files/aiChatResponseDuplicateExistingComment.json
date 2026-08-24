@@ -1,0 +1,11 @@
+{
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"replies\":[{\"reply\":\"message from gpt\",\"score\":-1,\"filename\":\"test_file.py\",\"lineNumber\":5,\"codeSnippet\":\"TypeClassOrPath\"}]}"
+      }
+    }
+  ]
+}

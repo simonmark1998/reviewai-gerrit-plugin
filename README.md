@@ -242,9 +242,8 @@ This correlates with the `aiType` field which defaults to CHATGPT if not specifi
   focused and deterministic.
 - `aiCommentTemperature`: Specifies the temperature setting for ChatGPT when replying to a comment, with a default
   setting of 1.0.
-- `aiReviewPatchSet`: Set to false by default, so new or updated Patch Sets are not reviewed
-  automatically. Set it to true only if you want automatic Patch Set review on update events.
-  Manually triggered reviews, such as the AI Review button and `/review` commands, still run.
+- `aiReviewPatchSet`: Deprecated. Patch Set uploads and rebases are never reviewed automatically;
+  reviews run only through manual triggers, such as the AI Review button and `/review` commands.
 - `aiReviewCommitMessages`: The default value is true. When enabled, this option also verifies if the commit message
   matches with the content of the Change Set.
 - `gptFullFileReview`: Enabled by default. Activating this option sends both unchanged lines and changes to ChatGPT for
@@ -262,8 +261,8 @@ non bearer token authorization e.g. api-key used for AZUREOpenAI.
   to ensure the API is compatible with the openAPI specification or additional response parsing will be
   needed to correctly read the data into the new API data structures.
 - `maxReviewLines`: The default value is 1000. This sets a limit on the number of lines of code included in the review.
-- `maxReviewFileSize`: Set with a default value of 10000, this parameter establishes a cap on the file size that can be
-  included in reviews.
+- `maxReviewFileSize`: Deprecated. Manual reviews no longer exclude files by extension or file size; Gerrit text diffs
+  are requested for every changed file. Binary files or files for which Gerrit returns no text diff are still skipped.
 - `enabledContextFiles`: Disabled by default (false). When enabled, a context-gathering layer runs before each
   stateless review and collects the related project files that the changed files depend on (through imports, includes or
   module references). These related files are sent to the AI as **read-only context only** (they are not reviewed and no

@@ -32,6 +32,7 @@ import com.googlesource.gerrit.plugins.aicodereview.localization.Localizer;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit.GerritClientReview;
+import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.messages.ClientMessage;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.messages.DebugCodeBlocksReview;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.client.patch.comment.GerritCommentRange;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.gerrit.GerritCodeRange;
@@ -39,14 +40,19 @@ import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.gerrit
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatReplyItem;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.api.openai.AIChatResponseContent;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.data.ChangeSetData;
+import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.data.GerritClientData;
 import com.googlesource.gerrit.plugins.aicodereview.mode.common.model.review.ReviewBatch;
 import com.googlesource.gerrit.plugins.aicodereview.settings.Settings;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.Getter;
@@ -57,6 +63,10 @@ public class PatchSetReviewer {
   private static final String SPLIT_REVIEW_MSG =
       "Too many changes. Please consider splitting into patches smaller "
           + "than %s lines for review.";
+  private static final int DUPLICATE_LINE_DISTANCE = 2;
+  private static final int MIN_DUPLICATE_TOKEN_OVERLAP = 3;
+  private static final double DUPLICATE_JACCARD_THRESHOLD = 0.74;
+  private static final double DUPLICATE_CONTAINMENT_THRESHOLD = 0.88;
 
   private final Configuration config;
   private final GerritClient gerritClient;
@@ -69,6 +79,7 @@ public class PatchSetReviewer {
   private GerritCommentRange gerritCommentRange;
   private List<ReviewBatch> reviewBatches;
   private List<GerritComment> commentProperties;
+  private List<GerritComment> existingReviewComments;
   private List<Integer> reviewScores;
   private Map<String, List<Integer>> reviewScoresByChange;
 
@@ -100,9 +111,12 @@ public class PatchSetReviewer {
     reviewBatches = new ArrayList<>();
     reviewScores = new ArrayList<>();
     reviewScoresByChange = new LinkedHashMap<>();
-    commentProperties = gerritClient.getClientData(change).getCommentProperties();
+    GerritClientData clientData = gerritClient.getClientData(change);
+    commentProperties = clientData.getCommentProperties();
+    existingReviewComments = getExistingReviewComments(clientData);
     gerritCommentRange = new GerritCommentRange(gerritClient, change);
     String patchSet = gerritClient.getPatchSet(change);
+    existingReviewComments = getExistingReviewComments(gerritClient.getClientData(change));
     log.debug(
         "PatchSet retrieved for AI review: change={}, chars={}, lines={}, commentProperties={}",
         change.getFullChangeId(),
@@ -326,15 +340,24 @@ public class PatchSetReviewer {
         log.warn("AIChat reply text is empty for reply item {}", replyItem);
         continue;
       }
+      ReviewBatch batchMap = new ReviewBatch(reply);
+      batchMap.setChangeId(replyItem.getChangeId());
+      if (change.getIsCommentEvent() && replyItem.getId() != null) {
+        setCommentBatchMap(batchMap, replyItem.getId());
+      } else {
+        setPatchSetReviewBatchMap(batchMap, replyItem);
+      }
+
       Integer score = replyItem.getScore();
       boolean isNotNegative = isNotNegativeReply(score);
       boolean isIrrelevant = isIrrelevantReply(replyItem);
-      boolean isHidden =
-          replyItem.isRepeated() || replyItem.isConflicting() || isIrrelevant || isNotNegative;
+      boolean isDuplicate = replyItem.isRepeated() || isDuplicateReply(batchMap, reply);
+      boolean isHidden = isDuplicate || replyItem.isConflicting() || isIrrelevant || isNotNegative;
       log.debug(
-          "AI reply filter decision #{}: isHidden={}, isNotNegative={}, isIrrelevant={}, replyFilterEnabled={}, filterNegativeComments={}, filterBelowScore={}, filterRelevantComments={}, relevanceThreshold={}",
+          "AI reply filter decision #{}: isHidden={}, isDuplicate={}, isNotNegative={}, isIrrelevant={}, replyFilterEnabled={}, filterNegativeComments={}, filterBelowScore={}, filterRelevantComments={}, relevanceThreshold={}",
           replyIndex,
           isHidden,
+          isDuplicate,
           isNotNegative,
           isIrrelevant,
           changeSetData.getReplyFilterEnabled(),
@@ -342,7 +365,25 @@ public class PatchSetReviewer {
           config.getFilterCommentsBelowScore(),
           config.getFilterRelevantComments(),
           config.getFilterCommentsRelevanceThreshold());
-      if (!replyItem.isConflicting() && !isIrrelevant && score != null) {
+      if (isDuplicate) {
+        log.info(
+            "AI reply item #{} skipped because it duplicates an existing review observation: changeId={}, filename={}, line={}",
+            replyIndex,
+            batchMap.getChangeId(),
+            batchMap.getFilename(),
+            batchMap.getLine());
+        continue;
+      }
+      if (replyItem.isConflicting()) {
+        log.info(
+            "AI reply item #{} skipped because it conflicts with existing review context or directives: changeId={}, filename={}, line={}",
+            replyIndex,
+            batchMap.getChangeId(),
+            batchMap.getFilename(),
+            batchMap.getLine());
+        continue;
+      }
+      if (!isIrrelevant && score != null) {
         log.debug("Score added: {}", score);
         reviewScores.add(score);
         reviewScoresByChange
@@ -350,14 +391,8 @@ public class PatchSetReviewer {
             .add(score);
       }
       if (changeSetData.getDebugReviewMode()) {
-        reply += debugCodeBlocksReview.getDebugCodeBlock(replyItem, isHidden);
-      }
-      ReviewBatch batchMap = new ReviewBatch(reply);
-      batchMap.setChangeId(replyItem.getChangeId());
-      if (change.getIsCommentEvent() && replyItem.getId() != null) {
-        setCommentBatchMap(batchMap, replyItem.getId());
-      } else {
-        setPatchSetReviewBatchMap(batchMap, replyItem);
+        batchMap.setContent(
+            batchMap.getContent() + debugCodeBlocksReview.getDebugCodeBlock(replyItem, isHidden));
       }
       if (changeSetData.getReplyFilterEnabled() && isHidden) {
         log.debug(
@@ -389,6 +424,190 @@ public class PatchSetReviewer {
         reviewBatches.size(),
         hiddenReviewBatches.size(),
         reviewScores);
+  }
+
+  private List<GerritComment> getExistingReviewComments(GerritClientData clientData) {
+    Map<String, GerritComment> comments = new LinkedHashMap<>();
+    if (clientData == null) {
+      return new ArrayList<>();
+    }
+    if (clientData.getCommentData() != null
+        && clientData.getCommentData().getCommentMap() != null) {
+      addExistingComments(comments, clientData.getCommentData().getCommentMap().values());
+    }
+    addExistingComments(comments, clientData.getDetailComments());
+    log.debug("Existing Gerrit comments collected for duplicate detection: {}", comments.size());
+    return new ArrayList<>(comments.values());
+  }
+
+  private void addExistingComments(
+      Map<String, GerritComment> comments, Collection<GerritComment> candidates) {
+    if (candidates == null) {
+      return;
+    }
+    for (GerritComment comment : candidates) {
+      if (comment == null) {
+        continue;
+      }
+      String key =
+          comment.getId() == null
+              ? comment.getFilename() + ":" + getCommentLine(comment) + ":" + comment.getMessage()
+              : comment.getId();
+      comments.putIfAbsent(key, comment);
+    }
+  }
+
+  private boolean isDuplicateReply(ReviewBatch batchMap, String reply) {
+    return isDuplicateOfSelectedReview(batchMap, reply)
+        || isDuplicateOfExistingGerritComment(batchMap, reply);
+  }
+
+  private boolean isDuplicateOfSelectedReview(ReviewBatch batchMap, String reply) {
+    for (ReviewBatch existingBatch : reviewBatches) {
+      if (isSameReviewLocation(batchMap, existingBatch)
+          && isSimilarReviewText(reply, existingBatch.getContent())) {
+        log.debug(
+            "AI reply duplicates another reply selected in the same response: filename={}, line={}",
+            batchMap.getFilename(),
+            batchMap.getLine());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isDuplicateOfExistingGerritComment(ReviewBatch batchMap, String reply) {
+    for (GerritComment existingComment : existingReviewComments) {
+      if (existingComment == null || existingComment.isAutogenerated()) {
+        continue;
+      }
+      String existingMessage = getCleanedExistingMessage(existingComment);
+      if (existingMessage.isBlank()) {
+        continue;
+      }
+      if (isSameReviewLocation(batchMap, existingComment)
+          && isSimilarReviewText(reply, existingMessage)) {
+        log.debug(
+            "AI reply duplicates an existing Gerrit comment: filename={}, line={}, existingAuthor={}, existingMessage={}",
+            batchMap.getFilename(),
+            batchMap.getLine(),
+            existingComment.getAuthor() == null ? null : existingComment.getAuthor().getUsername(),
+            summarize(existingMessage));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private String getCleanedExistingMessage(GerritComment comment) {
+    if (comment.getMessage() == null) {
+      return "";
+    }
+    ClientMessage clientMessage =
+        new ClientMessage(config, changeSetData, comment.getMessage(), localizer);
+    if (isFromAssistant(comment)) {
+      clientMessage.removeDebugCodeBlocksReview().removeDebugCodeBlocksDynamicSettings();
+    } else {
+      clientMessage.removeMentions().parseRemoveCommands();
+    }
+    return clientMessage.removeHeadings().getMessage();
+  }
+
+  private boolean isFromAssistant(GerritComment comment) {
+    return comment.getAuthor() != null
+        && comment.getAuthor().getAccountId() == changeSetData.getGptAccountId();
+  }
+
+  private boolean isSameReviewLocation(ReviewBatch left, ReviewBatch right) {
+    if (left.getChangeId() != null
+        && right.getChangeId() != null
+        && !left.getChangeId().equals(right.getChangeId())) {
+      return false;
+    }
+    if (!Objects.equals(left.getFilename(), right.getFilename())) {
+      return false;
+    }
+    return isSameLineScope(left.getLine(), right.getLine());
+  }
+
+  private boolean isSameReviewLocation(ReviewBatch batchMap, GerritComment comment) {
+    String commentFilename =
+        comment.getFilename() == null ? Settings.GERRIT_PATCH_SET_FILENAME : comment.getFilename();
+    if (!Objects.equals(batchMap.getFilename(), commentFilename)) {
+      return false;
+    }
+    return isSameLineScope(batchMap.getLine(), getCommentLine(comment));
+  }
+
+  private boolean isSameLineScope(Integer leftLine, Integer rightLine) {
+    if (leftLine == null || rightLine == null) {
+      return true;
+    }
+    return Math.abs(leftLine - rightLine) <= DUPLICATE_LINE_DISTANCE;
+  }
+
+  private Integer getCommentLine(GerritComment comment) {
+    if (comment.getLine() != null) {
+      return comment.getLine();
+    }
+    if (comment.getRange() != null) {
+      return comment.getRange().getStartLine();
+    }
+    return null;
+  }
+
+  private boolean isSimilarReviewText(String left, String right) {
+    String normalizedLeft = normalizeReviewText(left);
+    String normalizedRight = normalizeReviewText(right);
+    if (normalizedLeft.isEmpty() || normalizedRight.isEmpty()) {
+      return false;
+    }
+    if (normalizedLeft.equals(normalizedRight)) {
+      return true;
+    }
+
+    Set<String> leftTokens = getReviewTokens(normalizedLeft);
+    Set<String> rightTokens = getReviewTokens(normalizedRight);
+    if (leftTokens.isEmpty() || rightTokens.isEmpty()) {
+      return false;
+    }
+
+    int intersectionSize = 0;
+    for (String token : leftTokens) {
+      if (rightTokens.contains(token)) {
+        intersectionSize++;
+      }
+    }
+    if (intersectionSize < MIN_DUPLICATE_TOKEN_OVERLAP) {
+      return false;
+    }
+
+    int unionSize = leftTokens.size() + rightTokens.size() - intersectionSize;
+    double jaccardSimilarity = (double) intersectionSize / unionSize;
+    double containmentSimilarity =
+        (double) intersectionSize / Math.min(leftTokens.size(), rightTokens.size());
+    return jaccardSimilarity >= DUPLICATE_JACCARD_THRESHOLD
+        || containmentSimilarity >= DUPLICATE_CONTAINMENT_THRESHOLD;
+  }
+
+  private String normalizeReviewText(String message) {
+    return message
+        .replaceAll("(?s)```.*?```", " ")
+        .replace('`', ' ')
+        .replaceAll("(?m)^>.*$", " ")
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^\\p{L}\\p{N}]+", " ")
+        .trim();
+  }
+
+  private Set<String> getReviewTokens(String normalizedMessage) {
+    Set<String> tokens = new HashSet<>();
+    for (String token : normalizedMessage.split("\\s+")) {
+      if (token.length() >= 3) {
+        tokens.add(token);
+      }
+    }
+    return tokens;
   }
 
   private String resolveMessageContentChangeId(

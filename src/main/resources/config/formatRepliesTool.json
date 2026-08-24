@@ -18,7 +18,8 @@
                 "type": "string"
               },
               "reply": {
-                "type": "string"
+                "type": "string",
+                "description": "Concise Gerrit Markdown comment. If suggested code is included, wrap only that code in a fenced Markdown code block using triple backticks; otherwise use plain prose."
               },
               "score": {
                 "type": "integer"
