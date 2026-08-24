@@ -14,7 +14,6 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.mode.common.client.api.gerrit;
 
-import static com.googlesource.gerrit.plugins.aicodereview.utils.FileUtils.matchesExtensionList;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getNoEscapedGson;
 import static java.util.stream.Collectors.toList;
 
@@ -80,6 +79,8 @@ public class GerritClientPatchSet extends GerritClientAccount {
   protected void retrieveFileDiff(GerritChange change, List<String> files, int revisionBase)
       throws Exception {
     try (ManualRequestContext requestContext = config.openRequestContext()) {
+      for (String filename : files) {
+        isCommitMessage = filename.equals("/COMMIT_MSG");
         try {
           DiffInfo diff =
               config

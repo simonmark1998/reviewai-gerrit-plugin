@@ -73,9 +73,12 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
   }
 
   private boolean isPatchSetReviewEnabled(GerritChange change) {
-    if (!config.getAIReviewPatchSet()) {
-      log.debug("Disabled review function for created or updated PatchSets.");
+    if (!config.getAIReviewPatchSet() && !changeSetData.getForcedReview()) {
+      log.debug("Disabled automatic review function for created or updated PatchSets.");
       return false;
+    }
+    if (!config.getAIReviewPatchSet()) {
+      log.info("Automatic PatchSet review is disabled, but forced review was requested.");
     }
 
     Optional<PatchSetAttribute> patchSetAttributeOptional = change.getPatchSetAttribute();
@@ -104,8 +107,7 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
         patchSetAttribute.author == null ? null : patchSetAttribute.author.username,
         changeSetData.getForcedReview());
     // The only Change kind that automatically triggers the review is REWORK. If review is forced
-    // via command, this
-    // condition is bypassed
+    // via command, this condition is bypassed.
     if (patchSetEventKind != REWORK && !changeSetData.getForcedReview()) {
       log.debug("Change kind '{}' not processed", patchSetEventKind);
       return false;

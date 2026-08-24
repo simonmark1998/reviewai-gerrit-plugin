@@ -14,7 +14,6 @@
 
 package com.googlesource.gerrit.plugins.aicodereview.mode.stateful.client.api.git;
 
-import static com.googlesource.gerrit.plugins.aicodereview.utils.FileUtils.matchesExtensionList;
 import static com.googlesource.gerrit.plugins.aicodereview.utils.GsonUtils.getGson;
 
 import com.googlesource.gerrit.plugins.aicodereview.config.Configuration;
@@ -23,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.errors.GitAPIException;

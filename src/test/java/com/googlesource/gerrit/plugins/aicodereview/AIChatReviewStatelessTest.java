@@ -235,6 +235,17 @@ public class AIChatReviewStatelessTest extends AIChatReviewTestBase {
         gson.toJson(gerritPatchSetReview), gson.toJson(captor.getAllValues().get(0)));
   }
 
+  @Test
+  public void patchSetCreatedIsSkippedWhenAutomaticPatchSetReviewIsDisabled() throws Exception {
+    when(globalConfig.getBoolean(Mockito.eq("aiReviewPatchSet"), Mockito.anyBoolean()))
+        .thenReturn(false);
+
+    EventHandlerTask.Result result = handleEventBasedOnType(SupportedEvents.PATCH_SET_CREATED);
+
+    Assert.assertEquals(EventHandlerTask.Result.NOT_SUPPORTED, result);
+    Mockito.verify(revisionApiMock, Mockito.never()).review(Mockito.any(ReviewInput.class));
+  }
+
   /**
    * Verifies that when the AI response includes a {@code codeToken} field, the resulting inline
    * Gerrit comment highlights only that specific identifier rather than the full code snippet.

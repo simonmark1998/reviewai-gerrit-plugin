@@ -242,8 +242,9 @@ This correlates with the `aiType` field which defaults to CHATGPT if not specifi
   focused and deterministic.
 - `aiCommentTemperature`: Specifies the temperature setting for ChatGPT when replying to a comment, with a default
   setting of 1.0.
-- `aiReviewPatchSet`: Set to true by default. When switched to false, it disables the automatic review of Patch Sets as
-  they are created or updated.
+- `aiReviewPatchSet`: Set to false by default, so new or updated Patch Sets are not reviewed
+  automatically. Set it to true only if you want automatic Patch Set review on update events.
+  Manually triggered reviews, such as the AI Review button and `/review` commands, still run.
 - `aiReviewCommitMessages`: The default value is true. When enabled, this option also verifies if the commit message
   matches with the content of the Change Set.
 - `gptFullFileReview`: Enabled by default. Activating this option sends both unchanged lines and changes to ChatGPT for

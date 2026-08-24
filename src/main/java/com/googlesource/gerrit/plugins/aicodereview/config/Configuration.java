@@ -52,7 +52,7 @@ public class Configuration {
   public static final double DEFAULT_AI_CHAT_COMMENT_TEMPERATURE = 1.0;
 
   private static final String DEFAULT_AI_MODE = "stateless";
-  private static final boolean DEFAULT_REVIEW_PATCH_SET = true;
+  private static final boolean DEFAULT_REVIEW_PATCH_SET = false;
   private static final boolean DEFAULT_REVIEW_COMMIT_MESSAGES = true;
   private static final boolean DEFAULT_FULL_FILE_REVIEW = true;
   private static final boolean DEFAULT_STREAM_OUTPUT = false;
